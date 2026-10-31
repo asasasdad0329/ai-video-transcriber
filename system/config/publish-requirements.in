@@ -1,0 +1,8 @@
+# 資料卡／講義：DOCX 產生、Mermaid 渲染（使用系統 Edge／Chrome）、預覽頁轉圖。
+python-docx
+playwright
+pypdfium2
+Pillow
+PyYAML
+# 索引以影片名稱查找時做繁簡互轉（與轉錄環境同一套件）。
+opencc-python-reimplemented

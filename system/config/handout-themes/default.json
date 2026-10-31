@@ -1,0 +1,36 @@
+{
+  "name": "default",
+  "reference_docx": null,
+  "page": {"width_cm": 21.0, "height_cm": 29.7, "margin_cm": 2.0},
+  "fonts": {"latin": "Segoe UI", "east_asian": "Microsoft JhengHei", "body_pt": 12, "small_pt": 10.5, "line_spacing": 1.45},
+  "sizes": {"title_pt": 22, "subtitle_pt": 13, "chapter_pt": 17, "subheading_pt": 14},
+  "colors": {
+    "text": "222222",
+    "muted": "6B7280",
+    "heading": "1F3A5F",
+    "accent": "2E6DA4",
+    "table_header_fill": "E6EEF7",
+    "table_border": "B8C4D2",
+    "callout_fill": "F2F6FB",
+    "callout_border": "2E6DA4"
+  },
+  "image_max_width_cm": 15.5,
+  "frame_width_cm": 15.5,
+  "mermaid": {
+    "theme": "base",
+    "themeVariables": {
+      "primaryColor": "#EEF3FA",
+      "primaryBorderColor": "#2E6DA4",
+      "primaryTextColor": "#1F3A5F",
+      "secondaryColor": "#FFF6E5",
+      "tertiaryColor": "#F7F9FC",
+      "lineColor": "#5B7A99",
+      "edgeLabelBackground": "#FFFFFF",
+      "clusterBkg": "#F7F9FC",
+      "clusterBorder": "#B8C4D2",
+      "fontSize": "18px"
+    },
+    "flowchart": {"curve": "linear", "nodeSpacing": 28, "rankSpacing": 38, "padding": 14, "diagramPadding": 12, "wrappingWidth": 280},
+    "max_width_px": 720
+  }
+}

@@ -1,0 +1,6 @@
+# CPU OCR plus deterministic transcript review; no Torch or CUDA Python wheel.
+rapidocr-onnxruntime
+opencc-python-reimplemented
+pypinyin
+rapidfuzz
+PyYAML

@@ -1,0 +1,6 @@
+* text=auto eol=lf
+# These files participate in existing run hashes; preserve their exact bytes.
+system/config/bootstrap-lock.json -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+system/config/requirements.lock.txt -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+system/config/glossary.txt -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+*.cmd text eol=crlf

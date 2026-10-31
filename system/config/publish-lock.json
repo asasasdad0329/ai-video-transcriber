@@ -1,0 +1,17 @@
+{
+  "python": "3.12.12",
+  "venv": ".runtime/envs/publish",
+  "requirements": "system/config/publish-requirements.lock.txt",
+  "assets": {
+    "mermaid": {
+      "version": "11.17.2",
+      "license": "MIT",
+      "url": "https://registry.npmjs.org/mermaid/-/mermaid-11.17.2.tgz",
+      "integrity": "sha512-V6K3C8EBdEsPFZXSKMJe6ppQOENxuHARr9GvHX4hh47lAbhMRD9qf4oEK7LoaRQxULMa80/qt5gHO73aCleBBg==",
+      "member": "package/dist/mermaid.min.js",
+      "path": ".runtime/tools/mermaid/11.17.2/mermaid.min.js",
+      "sha256": "581ed7d74bd9048d0e3a91363927d72ef22942d7722546b27f7cc29e35390eb8"
+    }
+  },
+  "browser_channels": ["msedge", "chrome"]
+}

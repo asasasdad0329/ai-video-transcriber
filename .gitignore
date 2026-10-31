@@ -1,0 +1,18 @@
+# Only the maintainable system and entrypoints belong to Git.
+/*
+!/.gitignore
+!/.gitattributes
+!/AGENTS.md
+!/CLAUDE.md
+!/README.md
+!/README.en.md
+!/run.ps1
+!/run.cmd
+!/examples/
+!/LICENSE
+!/system/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+!.env.example

@@ -1,0 +1,42 @@
+{
+  "ffmpeg": {
+    "version": "7.1.1",
+    "build": "gyan.dev essentials_build",
+    "license": "GPL-3.0",
+    "url": "https://github.com/GyanD/codexffmpeg/releases/download/7.1.1/ffmpeg-7.1.1-essentials_build.zip",
+    "sha256": "04861d3339c5ebe38b56c19a15cf2c0cc97f5de4fa8910e4d47e5e6404e4a2d4",
+    "size": 92234348,
+    "path": ".runtime/cache/downloads/ffmpeg-7.1.1-essentials_build.zip",
+    "destination": ".runtime/tools/ffmpeg",
+    "members": {
+      "ffmpeg.exe": {
+        "member": "ffmpeg-7.1.1-essentials_build/bin/ffmpeg.exe",
+        "sha256": "b90225987bdd042cca09a1efb5e34e9848f2d1dbf5fbcd388753a44145522997"
+      },
+      "ffprobe.exe": {
+        "member": "ffmpeg-7.1.1-essentials_build/bin/ffprobe.exe",
+        "sha256": "05e8fa639450f8191635192871ae37a3ec3e4638fa12f3b7d49c6522ba16a8ed"
+      }
+    }
+  },
+  "cublas": {
+    "version": "11.11.3.6",
+    "cuda": "11.8",
+    "license": "NVIDIA CUDA Toolkit EULA",
+    "url": "https://developer.download.nvidia.com/compute/cuda/redist/libcublas/windows-x86_64/libcublas-windows-x86_64-11.11.3.6-archive.zip",
+    "sha256": "67b0934a6359e4ee26fff823c356021589d392c4fd49ca12624f570edc08e2b9",
+    "size": 420850025,
+    "path": ".runtime/cache/downloads/libcublas-windows-x86_64-11.11.3.6-archive.zip",
+    "destination": ".runtime/tools/whisper/Release",
+    "members": {
+      "cublas64_11.dll": {
+        "member": "libcublas-windows-x86_64-11.11.3.6-archive/bin/cublas64_11.dll",
+        "sha256": "8ca516b96b29c2fba2344909a896bc1cd7951f6cd11fe595a8a3929c02cccbed"
+      },
+      "cublasLt64_11.dll": {
+        "member": "libcublas-windows-x86_64-11.11.3.6-archive/bin/cublasLt64_11.dll",
+        "sha256": "3d06ca4e4893adb7a153ecd23a540e92817c967312b44646d8c3f91b089196e6"
+      }
+    }
+  }
+}

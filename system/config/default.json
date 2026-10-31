@@ -1,0 +1,22 @@
+{
+  "tools": {
+    "ffmpeg": ".runtime/tools/ffmpeg/ffmpeg.exe",
+    "ffprobe": ".runtime/tools/ffmpeg/ffprobe.exe",
+    "whisper": ".runtime/tools/whisper/Release/whisper-cli.exe"
+  },
+  "model": ".runtime/models/whisper/ggml-large-v3-turbo-q5_0.bin",
+  "language": "zh",
+  "device": "cuda",
+  "threads": 4,
+  "frame_interval": 2,
+  "chapter_seconds": 300,
+  "review": {
+    "word_probability_threshold": 0.5,
+    "min_low_probability_tokens": 1,
+    "review_numbers": true,
+    "ocr_window_seconds": 20,
+    "max_candidates_per_segment": 5,
+    "max_terms": 250,
+    "candidate_similarity": 90
+  }
+}
