@@ -58,7 +58,7 @@ recheck 使用同一模型 beam 8，無中文 prompt，不能當獨立票。沒�
 
 ## 完整畫面轉錄
 
-**預設隔離讀圖上下文。** `index-evidence` 後，主代理只用本機索引與 `visual-batches <index_dir>` 規劃批次，不在主對話開 contact sheet 或大量原圖。Codex 以 `spawn_agent` 的 `fork_turns: "none"` 把互不重疊的批次交給短上下文子代理；每個子代理只取自己的批次清單、接觸表及必要原圖，回傳帶群組／影格 ID 的精簡觀察。主代理彙整相鄰批次、處理歧義並獨自寫入 `visuals.reviewed.json`、執行 `finalize-visuals`。子代理不得讀 ASR／候選全文或執行 `focused-review`、草稿與正式提交命令。批次入口、委派內容、跨批次核對及 fallback 見 [本機證據流程](../../docs/local-evidence.md)。
+**預設隔離讀圖上下文。** `index-evidence` 後，主代理只用本機索引與 `visual-batches <index_dir>` 規劃批次，不在主對話開 contact sheet 或大量原圖。用代理環境的子代理功能（例如 Codex 的 `spawn_agent` 加 `fork_turns: "none"`、Claude Code 的 Agent 工具）把互不重疊的批次交給不帶主對話的短上下文子代理；每個子代理只取自己的批次清單、接觸表及必要原圖，回傳帶群組／影格 ID 的精簡觀察。主代理彙整相鄰批次、處理歧義並獨自寫入 `visuals.reviewed.json`、執行 `finalize-visuals`。子代理不得讀 ASR／候選全文或執行 `focused-review`、草稿與正式提交命令。批次入口、委派內容、跨批次核對及 fallback 見 [本機證據流程](../../docs/local-evidence.md)。
 
 子代理使用批次索引及分頁 OCR 證據，先識別內容不同的圖卡，再開啟清楚版本；不把完整 visuals.json 送入模型上下文。對每個原局／圖表保留整張內容，不能只摘主題或幾個字：
 

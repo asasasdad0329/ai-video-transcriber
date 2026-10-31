@@ -950,6 +950,8 @@ def finalize_visuals(run_dir, document_path):
             if card.get("reviewed") is not True:
                 raise ValueError("每張卡片必須 reviewed=true，表示作者已實際查看所涵蓋畫面")
             fids = _refs(card.get("frame_ids"), known, "card.frame_ids", required=True)
+            # Either field may be left out; the card still needs one of them with content.
+            card = {"verbatim_text": "", "structure": "", **card}
             for key in ("verbatim_text", "structure"):
                 if not isinstance(card.get(key), str):
                     raise ValueError(f"card.{key} must be text")

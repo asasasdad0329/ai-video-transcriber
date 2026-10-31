@@ -50,6 +50,34 @@ def _source_positions(source, converted):
     return origin
 
 
+_T2S = OpenCC("t2s")
+
+
+@lru_cache(maxsize=None)
+def _simplified_only(char):
+    """Taiwan's Big5 set lacks it and s2tw changes it: 们 标 发, not 只 台 后 游."""
+    if not ("㐀" <= char <= "鿿" or "\U00020000" <= char <= "\U0003ffff"):
+        return False
+    try:
+        char.encode("cp950")
+        return False
+    except UnicodeEncodeError:
+        return _CC.convert(char) != char
+
+
+@lru_cache(maxsize=None)
+def _traditional_only(char):
+    """Has a separate simplified form: 們 標 後 灣, not 只 台 后 然."""
+    return _T2S.convert(char) != char
+
+
+def _already_traditional(text):
+    # s2tw is not idempotent on Traditional text (但是只有→但是隻有, 游標→遊標), so a
+    # slide or note that shows Traditional forms and no simplified-only one is left alone.
+    # Text of shared characters only (然后, 柜台) still needs the converter.
+    return any(map(_traditional_only, text)) and not any(map(_simplified_only, text))
+
+
 def _taiwan_script(text):
     """s2tw and the Taiwan word list, keeping 台 as the default spelling.
 
@@ -57,7 +85,7 @@ def _taiwan_script(text):
     A 臺 already in the source stays, as do 颱風 and 檯燈. Word-list entries
     still match the s2tw output, and a listed replacement is written as listed.
     """
-    converted = _CC.convert(text)
+    converted = text if _already_traditional(text) else _CC.convert(text)
     origin = _source_positions(text, converted)
 
     def keep_tai(start, end):
@@ -80,9 +108,12 @@ _WIDE = {",": "，", "?": "？", "!": "！"}
 
 
 def _cjk(char):
+    # Letters only: 「」／ and other full-width symbols say nothing about the language,
+    # so 「Fork me on Google Drive!」 and set?／suite? keep their ASCII marks.
     code = ord(char)
-    return (0x2E80 <= code <= 0x9FFF or 0xAC00 <= code <= 0xD7AF or 0xF900 <= code <= 0xFAFF
-            or 0xFE30 <= code <= 0xFE4F or 0xFF00 <= code <= 0xFFEF or 0x20000 <= code <= 0x3FFFF)
+    return (0x3040 <= code <= 0x30FF or 0x3100 <= code <= 0x312F or 0x3400 <= code <= 0x4DBF
+            or 0x4E00 <= code <= 0x9FFF or 0xAC00 <= code <= 0xD7AF or 0xF900 <= code <= 0xFAFF
+            or 0x20000 <= code <= 0x3FFFF)
 
 
 def _widen_punctuation(text, held):

@@ -56,11 +56,26 @@ class ReadingEditionTests(unittest.TestCase):
         self.assertEqual(reading.traditional("很明显卡住了"), "很明顯卡住了")
         self.assertEqual(reading.traditional("软件,好吗?", punctuation=False), "軟體,好嗎?")
 
+    def test_already_traditional_text_is_not_run_through_the_simplified_converter(self):
+        # s2tw is not idempotent on Traditional slides: 但是只有→但是隻有, 游標→遊標.
+        for source in ("但是只有一個", "滑鼠游標移到這裡", "皇后的頭髮", "台灣的臺北"):
+            with self.subTest(source=source):
+                self.assertEqual(reading.traditional(source), source)
+        # Simplified text, and text of shared characters only, still converts.
+        for source, expected in (("我们在这里", "我們在這裡"), ("台湾", "台灣"), ("然后", "然後"), ("柜台", "櫃檯")):
+            with self.subTest(source=source):
+                self.assertEqual(reading.traditional(source), expected)
+
     def test_half_width_punctuation_widens_only_beside_chinese(self):
         for source, expected in (("First, introduce", "First, introduce"), ("Google Drive!", "Google Drive!"),
                                  ("1,000", "1,000"), ("Really?!", "Really?!"),
                                  ("好,我們", "好，我們"), ("真的?", "真的？"), ("OK,我們", "OK，我們"),
                                  ("真的?!", "真的？！"), ("好 , 我們", "好 ， 我們"), ("First,\n第二行", "First,\n第二行")):
+            with self.subTest(source=source):
+                self.assertEqual(reading.traditional(source), expected)
+        # Full-width symbols are not Chinese letters: quoted or slashed English keeps its marks.
+        for source, expected in (("「Fork me on Google Drive!」", "「Fork me on Google Drive!」"),
+                                 ("set?／suite?／ware?", "set?／suite?／ware?"), ("真的?」", "真的？」")):
             with self.subTest(source=source):
                 self.assertEqual(reading.traditional(source), expected)
         # Held terms count by their own characters; literals keep theirs untouched.

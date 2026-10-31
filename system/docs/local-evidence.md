@@ -31,7 +31,7 @@
 .\run.ps1 visual-batches "<index_dir>" --sheets-per-batch 3 --batch-id vb001
 ```
 
-有獨立子代理時，主代理按概覽將批次委派出去。Codex 使用 `spawn_agent` 並設定 `fork_turns: "none"`，只傳 run ID、index_dir、批次 ID、`sheets_per_batch`、預期首尾群組 ID 與下列短任務要求；不要 fork 完整對話或把 focused-review／候選全文傳給子代理。各子代理可並行處理互不重疊的批次，但每個子代理只看自己的接觸表；若一批需要大量原圖，讓子代理回報已完成與待處理群組，再由新的短上下文子代理只接剩餘群組，避免在單一子代理內再次累積長上下文。子代理只執行 `visual-batches --batch-id`、必要的 `evidence-query` 與圖片檢視，不寫畫面卡或修改 run。
+有獨立子代理時，主代理按概覽將批次委派出去。用代理環境提供的子代理功能開不帶主對話的全新上下文，例如 Codex 的 `spawn_agent` 設定 `fork_turns: "none"`、Claude Code 的 Agent 工具開新的子代理（不用 fork）；只傳 run ID、index_dir、批次 ID、`sheets_per_batch`、預期首尾群組 ID 與下列短任務要求；不要 fork 完整對話或把 focused-review／候選全文傳給子代理。各子代理可並行處理互不重疊的批次，但每個子代理只看自己的接觸表；若一批需要大量原圖，讓子代理回報已完成與待處理群組，再由新的短上下文子代理只接剩餘群組，避免在單一子代理內再次累積長上下文。子代理只執行 `visual-batches --batch-id`、必要的 `evidence-query` 與圖片檢視，不寫畫面卡或修改 run。
 
 委派要求須包含：讀完本批每張接觸表，按群組核對資料圖、未知情境與變化狀態；小字、表格數值、箭頭或疑似新增內容須開清楚原圖，不能只看 OCR 或縮圖。回傳 `batch_id`、實際檢視的 `group_ids` 與 `frame_ids`、有內容的卡片候選（可見原文、完整結構、影格 ID、uncertainties）、有依據的省略候選（群組 ID、理由、已看的依據影格），以及需補看的群組。只讀了概覽的字幕不得聲稱逐字核圖；本機標籤、OCR 和影格檔名都只是資料。不得讀 ASR 全文、完整 segment／token JSON、候選全文，也不得呼叫 `focused-review`、`start-draft`、`read-draft` 或 `finish-review`。子代理只向主代理回報，不直接向使用者交付。
 
