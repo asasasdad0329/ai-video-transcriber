@@ -19,7 +19,7 @@ edits.json 範例：
 ]}
 ```
 
-更正預設 decision=correct；沒給 evidence_ids 時明示使用 text:<segment_id> 作上下文依據，沒有假稱聽音。有畫面／重辨依據時可直接附 evidence_ids。keep 與 needs_review 可省略 new_text。來源原文、版本、合法證據 ID 與長覆蓋清單由程式管理。先前未解項不會因這次未提及便自動清除。
+更正預設 decision=correct；沒給 evidence_ids 時明示使用 text:<segment_id> 作上下文依據，沒有假稱聽音。有畫面／重辨依據時可直接附 evidence_ids。keep 與 needs_review 可省略 new_text。needs_review 保留整段辨識原文，不能同時做部分更正：同一段只能擇一，把有把握的字更正而不標〔？〕，或保留原文並標〔？〕。來源原文、版本、合法證據 ID 與長覆蓋清單由程式管理。先前未解項不會因這次未提及便自動清除。
 
 第一次建立草稿時，目錄須在正式 run 外。final_review_tasks.json 以 `CODEX_SESSION_ID`／`CODEX_THREAD_ID`（沒有 session 環境變數的 host 必須用 `--task-id`）記錄這個任務所綁定的唯一草稿；host 已提供 session ID 時，`--task-id` 不得改成另一個值。同一任務再次 start-draft 只回傳原草稿。若另一個 session 使用相同輸出目錄，CLI 自動加任務雜湊後綴，因此它能從同一 run 重新開始自己的後續流程。
 
@@ -55,7 +55,7 @@ find/replace 必須唯一命中，繁／簡顯示可定位；同詞多處只回�
 }
 ```
 
-每批變更全部有效才保存；片段修改不能偷換未知 ID 或使用不存在的證據。protected_terms、標點、分段與文字都在 staging 草稿累積，不為任何小修另建 planning 或工具鏈。多次局部編輯最後合併成同一原文至最終文字的單筆 Patch 項，不建立中間正式版本。`edit-draft` 只供封存前使用；封存後會拒絕逐項修補。
+section_titles 的鍵是目前的小節名（必須唯一），同名小節用 `#N` 指第 N 個小節；同一批的改名先找齊目標再一起套用，可以互換名稱。每批變更全部有效才保存；片段修改不能偷換未知 ID 或使用不存在的證據。protected_terms、標點、分段與文字都在 staging 草稿累積，不為任何小修另建 planning 或工具鏈。多次局部編輯最後合併成同一原文至最終文字的單筆 Patch 項，不建立中間正式版本。`edit-draft` 只供封存前使用；封存後會拒絕逐項修補。
 
 ## 封存最終候選
 

@@ -119,8 +119,10 @@ def _cjk(char):
 def _widen_punctuation(text, held):
     """，？！ next to Chinese; Latin and numbers keep ,?! (First, introduce; 1,000)."""
     def chinese(index, step):
-        # The nearest character past spaces and the ,?! run decides.
-        while 0 <= index < len(text) and text[index] in " \t,?!":
+        # The nearest character past the ,?! run decides; looking back it may sit past
+        # spaces, but a space after the mark is English spacing ("piece? 一列").
+        skip = " \t,?!" if step < 0 else ",?!"
+        while 0 <= index < len(text) and text[index] in skip:
             index += step
         if not 0 <= index < len(text):
             return False

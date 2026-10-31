@@ -23,9 +23,9 @@
 
 ## 首次使用與系統元件
 
-所有命令都經過專案根目錄的 `run.ps1`。在 PowerShell 用 `./run.ps1 <命令>`；在 cmd、Git Bash，或 PowerShell 回報已停用指令碼執行時，改用 `./run.cmd <命令>`，參數相同。`run.cmd` 經過 cmd，參數含 `&`、`|`、`<`、`>`、`^`、`%` 時改用 `powershell -NoProfile -ExecutionPolicy Bypass -File ./run.ps1 <命令>`。輸出一律是 UTF-8 文字，可以直接用管線過濾或解析 JSON；結束碼 0 才算成功。setup 的完整輸出另存在 `.runtime/logs`，不需要自行轉存。
+所有命令都經過專案根目錄的 `run.ps1`。在 PowerShell 用 `./run.ps1 <命令>`；在 cmd、Git Bash，或 PowerShell 回報已停用指令碼執行時，改用 `./run.cmd <命令>`，參數相同。`run.cmd` 經過 cmd，參數含 `&`、`|`、`<`、`>`、`^`、`%` 時改用 `powershell -NoProfile -ExecutionPolicy Bypass -File ./run.ps1 <命令>`。輸出一律是 UTF-8 文字，可以直接用管線過濾或解析 JSON（用 Python 讀管線時加 `-X utf8`，否則會以系統代碼頁解碼）；結束碼 0 才算成功。setup 的完整輸出另存在 `.runtime/logs`，不需要自行轉存。
 
-新電腦第一次執行任何命令時，`run.ps1` 會先把專案專用的 uv 與 Python 裝進 `.runtime`（約 50 MB），之後 `catalog` 即可使用。`.runtime/envs/transcribe` 不存在時，先告訴使用者需要執行 `./run.ps1 setup`（約 1.5 GB 下載，全部裝在專案內），再執行；要做資料卡或講義而 `.runtime/envs/publish` 不存在時，同樣處理 `./run.ps1 setup-publish`。setup 中斷或失敗時，排除原因後重跑同一個命令即可接續，已完成的部分不會重做。setup 完成後，以及 setup 或 doctor 失敗時，執行 `./run.ps1 doctor` 並逐項讀 `system` 欄位。
+新電腦第一次執行任何命令時，`run.ps1` 會先把專案專用的 uv 與 Python 裝進 `.runtime`（約 50 MB），之後 `catalog` 即可使用。`.runtime/envs/transcribe` 不存在時，告訴使用者要執行 `./run.ps1 setup`（約 1.5 GB 下載，全部裝在專案內）後直接執行，不必等回覆；要做資料卡或講義而 `.runtime/envs/publish` 不存在時，同樣處理 `./run.ps1 setup-publish`。setup 中斷或失敗時，排除原因後重跑同一個命令即可接續，已完成的部分不會重做。setup 完成後，以及 setup 或 doctor 失敗時，執行 `./run.ps1 doctor` 並逐項讀 `system` 欄位。
 
 `system` 列出無法裝進專案的系統元件。缺少時告訴使用者元件、用途、必要性，以及 README.md「系統元件與安裝指引」的安裝方式。使用者要 Agent 代為安裝時，只能用該指引列出的指令，並先依下節取得同意，動作寫「安裝」，註明是否需要系統管理員權限或重新開機。指引沒有列出的安裝方式、其他系統設定與專案外既有環境一律不動。
 

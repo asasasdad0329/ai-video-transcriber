@@ -75,7 +75,8 @@ class ReadingEditionTests(unittest.TestCase):
                 self.assertEqual(reading.traditional(source), expected)
         # Full-width symbols are not Chinese letters: quoted or slashed English keeps its marks.
         for source, expected in (("「Fork me on Google Drive!」", "「Fork me on Google Drive!」"),
-                                 ("set?／suite?／ware?", "set?／suite?／ware?"), ("真的?」", "真的？」")):
+                                 ("set?／suite?／ware?", "set?／suite?／ware?"), ("真的?」", "真的？」"),
+                                 ("piece? 一列", "piece? 一列"), ("好 ,我們", "好 ，我們")):
             with self.subTest(source=source):
                 self.assertEqual(reading.traditional(source), expected)
         # Held terms count by their own characters; literals keep theirs untouched.

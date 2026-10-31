@@ -621,11 +621,19 @@ def _edit_data(draft, data, allowed):
     titles = data.get("section_titles", {})
     if not isinstance(titles, dict):
         raise ValueError("section_titles must map old title to new title")
+    sections, renames = draft["layout"]["sections"], []
     for old, new in titles.items():
-        matches = [s for s in draft["layout"]["sections"] if s["title"] == old]
+        # "#3" names the third section, for slides that share a title.
+        if old[:1] == "#" and old[1:].isdigit() and 1 <= int(old[1:]) <= len(sections):
+            matches = [sections[int(old[1:]) - 1]]
+        else:
+            matches = [s for s in sections if s["title"] == old]
         if len(matches) != 1 or not isinstance(new, str) or not new.strip():
-            raise ValueError("section title must match exactly once")
-        matches[0]["title"] = new
+            raise ValueError("section title must match exactly once; use #N for the N-th section")
+        renames.append((matches[0], old, new))
+    # Targets are found first, so one rename never hides or creates another's.
+    for section, old, new in renames:
+        section["title"] = new
         changed.append({"title_before": old, "title_after": new})
     protected = data.get("protected_terms", [])
     if (not isinstance(protected, list)

@@ -116,6 +116,22 @@ class FinalReviewTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "already published"):
             final.read_once(self.draft, task_id="final-review-test")
 
+    def test_sections_are_renamed_by_position_with_all_targets_found_first(self):
+        self.start()
+        titles = [section["title"] for section in final._load(self.draft)[1]["layout"]["sections"]]
+        self.assertGreaterEqual(len(titles), 2)
+        self.assertNotEqual(titles[0], titles[1])
+        # A swap only works when every target is found before any rename; #N reaches shared titles.
+        final.edit(self.draft, self.changes({"section_titles": {titles[0]: titles[1], titles[1]: titles[0]}},
+                                            "swap.json"), task_id="final-review-test")
+        final.edit(self.draft, self.changes({"section_titles": {"#1": "第一節"}}, "position.json"),
+                   task_id="final-review-test")
+        renamed = [section["title"] for section in final._load(self.draft)[1]["layout"]["sections"]]
+        self.assertEqual(renamed[:2], ["第一節", titles[0]])
+        with self.assertRaisesRegex(ValueError, "use #N"):
+            final.edit(self.draft, self.changes({"section_titles": {"#99": "不存在"}}, "missing.json"),
+                       task_id="final-review-test")
+
     def test_card_punctuation_fix_appears_as_written(self):
         cards = self.fixture.visual_cards()
         cards["cards"][1]["verbatim_text"] = "First， introduce the plan."  # OCR read a full-width comma

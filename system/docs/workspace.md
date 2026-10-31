@@ -11,7 +11,7 @@ AGENTS.md 是唯一共用入口，CLAUDE.md 只以 `@AGENTS.md` 匯入它，讓 
 
 ## 入口與殼層
 
-run.ps1 與 run.cmd 只做兩件事：第一次使用時用 Windows 內建工具（curl、PowerShell、tar）下載 uv 並由 uv 安裝鎖定的 Python，然後把參數原封不動交給 system/bootstrap/launcher.py。命令分派、環境變數、setup 與下載全部寫在 Python。理由是 Windows PowerShell 5.1 以系統代碼頁讀沒有 BOM 的指令碼、傳給外部程式的參數會掉雙引號、導向的 stderr 會變成錯誤；Python 以 UTF-8 讀原始碼、用參數清單呼叫子程序，三者都不受影響。因此 .ps1 與 .cmd 檔只能用英文字元，不內嵌程式碼，外部程式成功與否只看結束碼；system/tests/test_entrypoints.py 用 Windows PowerShell 5.1 實際檢查這些規則與參數傳遞。
+run.ps1 與 run.cmd 只做兩件事：第一次使用時用 Windows 內建工具（curl、PowerShell、tar）下載 uv 並由 uv 安裝鎖定的 Python，然後把參數原封不動交給 system/bootstrap/launcher.py。專案 Python 已存在時，run.cmd 直接啟動它，不經過 PowerShell：Windows PowerShell 夾在管線中間時，接在後面的原生程式（python、jq）可能讀不到任何資料。命令分派、環境變數、setup 與下載全部寫在 Python。理由是 Windows PowerShell 5.1 以系統代碼頁讀沒有 BOM 的指令碼、傳給外部程式的參數會掉雙引號、導向的 stderr 會變成錯誤；Python 以 UTF-8 讀原始碼、用參數清單呼叫子程序，三者都不受影響。因此 .ps1 與 .cmd 檔只能用英文字元，不內嵌程式碼，外部程式成功與否只看結束碼；system/tests/test_entrypoints.py 用 Windows PowerShell 5.1 實際檢查這些規則與參數傳遞。
 
 下載依序嘗試 curl.exe、Windows PowerShell 與 Python。前兩者走 Windows 自己的憑證驗證，會即時補抓缺少的根憑證與中繼憑證；Python 只讀憑證庫的副本。檔案是否正確一律由鎖定的 SHA-256 判定。uv 預設信任自帶的 Mozilla 根憑證，失敗時改用 Windows 憑證庫重試一次，以涵蓋公司網路的代理憑證。
 
