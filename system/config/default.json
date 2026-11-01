@@ -6,7 +6,7 @@
   },
   "model": ".runtime/models/whisper/ggml-large-v3-turbo-q5_0.bin",
   "language": "zh",
-  "device": "cuda",
+  "device": "auto",
   "threads": 4,
   "frame_interval": 2,
   "chapter_seconds": 300,

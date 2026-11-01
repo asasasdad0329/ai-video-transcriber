@@ -725,7 +725,7 @@ def process(source, language=None, device=None, interval=None, *, resume_run=Non
         def do_asr(attempt):
             out = run / "work" / f"asr-{attempt:03d}"
             transcript = media.transcribe(tools["whisper"], _root_path(config["model"]), run / "audio.wav", out,
-                                          config.get("language", "zh"), config.get("device", "cuda"), config.get("threads", 4))
+                                          config.get("language", "zh"), config.get("device", "auto"), config.get("threads", 4))
             transcript.update({"run_id": run_id, "source_sha256": identity["source_sha256"]})
             # Native JSON/log locations stay portable within the run.
             for key in ("raw_json", "stdout_log", "stderr_log"):
@@ -1150,7 +1150,7 @@ def recheck(run_dir, segment_id):
                         "-t", str(end - start), "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(clip)],
                        attempt, 120, attempt / "crop")
             result = media.transcribe(_root_path(config["tools"]["whisper"]), _root_path(config["model"]), clip,
-                                      attempt / "asr", config.get("language", "zh"), config.get("device", "cuda"),
+                                      attempt / "asr", config.get("language", "zh"), config.get("device", "auto"),
                                       config.get("threads", 4), prompt=prompt, beam_size=8)
         except Exception as exc:
             operation.update({"status": "failed", "error": str(exc), "failed_at": _now()})
@@ -1670,7 +1670,7 @@ def main(argv=None):
     proc = commands.add_parser("process")
     proc.add_argument("source")
     proc.add_argument("--language")
-    proc.add_argument("--device", choices=("cuda", "cpu"))
+    proc.add_argument("--device", choices=("auto", "cuda", "cpu"))
     proc.add_argument("--interval", type=float)
     for name in ("status", "review-bundle", "context-bundle", "chapters", "resume", "snapshot-primary"):
         command = commands.add_parser(name, **({"help": "改主稿前先存一份目前版本到 run 的 primary_history"}

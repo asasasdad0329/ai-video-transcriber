@@ -13,7 +13,7 @@ description: 在本專案將影片轉成含畫面內容的完整逐字稿，利�
 .\run.ps1 doctor
 .\run.ps1 list-runs
 .\run.ps1 inspect-targets "<source>"
-.\run.ps1 process "<source>" --language zh --device cuda
+.\run.ps1 process "<source>" --language zh
 .\run.ps1 status "<run_dir>" | ConvertFrom-Json | Select-Object run_id,status,message,primary_transcript,review,context_review,visual_review,exports | ConvertTo-Json -Depth 6
 ```
 

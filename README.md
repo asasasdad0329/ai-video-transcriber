@@ -8,7 +8,7 @@
 | --- | --- |
 | 用途 | 中文教學影片 → 逐字稿、資料卡、講義 |
 | 平台 | Windows 11（Windows 10 未測試）、Windows PowerShell 5.1 |
-| 硬體 | 建議 NVIDIA 顯示卡；沒有顯示卡可改用 CPU，速度較慢 |
+| 硬體 | 建議 NVIDIA 顯示卡；沒有時自動改用 CPU，速度較慢 |
 | 語音辨識 | whisper.cpp b4938，模型 large-v3-turbo（q5_0） |
 | 畫面文字 | 換景偵測加固定間隔抽圖，RapidOCR 以 CPU 辨識 |
 | 輸出 | 逐字稿 `.md`、資料卡 `.md`、講義 `.docx` |
@@ -54,7 +54,7 @@ flowchart LR
 | 元件 | 用途 | 必要性 | 安裝方式 |
 | --- | --- | --- | --- |
 | Microsoft Visual C++ 2015–2022 可轉散發套件（x64） | whisper.cpp 執行需要 | 必要 | `winget install --id Microsoft.VCRedist.2015+.x64 -e`，或從 [Microsoft 官方](https://aka.ms/vs/17/release/vc_redist.x64.exe)下載執行。需要系統管理員權限。 |
-| NVIDIA 顯示卡驅動（支援 CUDA 11.8 以上） | GPU 語音辨識 | 建議；沒有時用 `--device cpu` | 沒有 winget 套件。從 [NVIDIA 驅動下載](https://www.nvidia.com/Download/index.aspx)或 NVIDIA App 依顯示卡型號安裝。AI 助理可以用 `nvidia-smi` 或 `Get-CimInstance Win32_VideoController` 查出型號並開啟下載頁；安裝程式需要系統管理員權限，可能需要重新開機。 |
+| NVIDIA 顯示卡驅動（支援 CUDA 11.8 以上） | GPU 語音辨識 | 建議；沒有時自動改用 CPU | 沒有 winget 套件。從 [NVIDIA 驅動下載](https://www.nvidia.com/Download/index.aspx)或 NVIDIA App 依顯示卡型號安裝。AI 助理可以用 `nvidia-smi` 或 `Get-CimInstance Win32_VideoController` 查出型號並開啟下載頁；安裝程式需要系統管理員權限，可能需要重新開機。 |
 | Microsoft Edge 或 Google Chrome | 講義的 Mermaid 圖 | 製作講義時必要 | Windows 11 內建 Edge。缺少時：`winget install --id Microsoft.Edge -e` 或 `winget install --id Google.Chrome -e`。 |
 | Microsoft Word | 講義預覽（轉 PDF） | 選用；沒有時只略過預覽 | 需要 Microsoft 365／Office 授權，AI 助理不代為安裝。 |
 
@@ -254,7 +254,7 @@ AI 助理會自行執行需要的指令；以下是你可能會直接用到的�
 .\run.ps1 list-runs                  # 轉錄任務清單
 .\run.ps1 status <run_dir>           # 重新檢查某個轉錄任務的完成狀態
 .\run.ps1 process <影片路徑>          # 只做本機處理（語音辨識、抽圖、OCR）
-.\run.ps1 process <影片路徑> --device cpu   # 沒有 NVIDIA 顯示卡時改用 CPU
+.\run.ps1 process <影片路徑> --device cpu   # 強制用 CPU（預設自動選擇）
 .\run.ps1 doctor                     # 檢查環境與系統元件
 .\run.ps1 test                       # 執行測試
 ```
@@ -265,7 +265,7 @@ AI 助理會自行執行需要的指令；以下是你可能會直接用到的�
 測試環境是 Claude Code 與 Codex。理論上任何能呼叫工具（執行指令、讀寫檔案）並具備影像辨識能力的模型與代理環境都能使用：規則寫在 AGENTS.md，所有操作都透過 `run.ps1`。代理環境沒有提供 session ID 時，AI 助理需要用 `--task-id` 指定任務 ID。
 
 **沒有 NVIDIA 顯示卡可以用嗎？**
-可以。處理時加上 `--device cpu` 改用 CPU 做語音辨識，速度明顯較慢。OCR 本來就使用 CPU。
+可以。沒有支援的 NVIDIA 顯示卡時，語音辨識自動改用 CPU，不需要另外設定。速度依處理器而定：在 12 執行緒的處理器上，處理時間約與影片等長，GPU 大約快 20 倍。OCR 本來就使用 CPU。
 
 **影片內容會上傳到網路嗎？**
 語音辨識、抽圖與 OCR 都在本機執行，影片不會上傳。但 AI 助理校字時讀到的疑點片段、畫面截圖，以及封存後那一次全文閱讀，會傳送到你所使用的 AI 服務。

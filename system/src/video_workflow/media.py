@@ -168,11 +168,16 @@ def _gpu_evidence(log: str) -> list[str]:
 
 
 def transcribe(whisper: Path, model: Path, audio: Path, out_dir: Path,
-               language: str = "zh", device: str = "cuda", threads: int = 4,
-               prompt: str = "", beam_size: int = 5) -> dict:
+               language: str = "zh", device: str = "auto", threads: int = 4,
+               prompt: str = "", beam_size: int = 5, *, gpu_ready=None) -> dict:
+    """device "auto" uses the GPU when the driver supports it and the CPU otherwise.
+
+    Only an explicit "cuda" fails without verified GPU use; "auto" records
+    whichever device actually ran, so a machine without NVIDIA still finishes.
+    """
     whisper, model, audio = _file(whisper), _file(model), _file(audio)
-    if device not in ("cuda", "cpu"):
-        raise ValueError("device must be 'cuda' or 'cpu'")
+    if device not in ("auto", "cuda", "cpu"):
+        raise ValueError("device must be 'auto', 'cuda' or 'cpu'")
     if threads < 1:
         raise ValueError("threads must be positive")
     if not 1 <= beam_size <= 16:
@@ -183,29 +188,47 @@ def transcribe(whisper: Path, model: Path, audio: Path, out_dir: Path,
         raise ValueError("Invalid language code")
     out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    prefix = out_dir / "whisper"
-    raw_path = prefix.with_suffix(".json")
     normalized_path = out_dir / "transcript.json"
-    if raw_path.exists() or normalized_path.exists():
+    if any((out_dir / name).exists() for name in ("whisper.json", "whisper-cpu.json", "transcript.json")):
         raise FileExistsError("Existing transcript output; use a fresh run directory")
     try:
         with wave.open(str(audio), "rb") as wav:
             duration = wav.getnframes() / wav.getframerate()
     except (wave.Error, OSError) as exc:
         raise MediaError("transcribe expects a valid WAV from extract_audio") from exc
-    # Windows' narrow argv in some official builds corrupts absolute CJK paths.
-    # The child cwd is set through CreateProcessW; project-internal relative
-    # arguments avoid that conversion without changing the system code page.
-    args = [str(whisper), "-m", os.path.relpath(model, out_dir),
-            "-f", os.path.relpath(audio, out_dir), "-l", language,
-            "-t", str(threads), "-bs", str(beam_size), "-ojf", "-of", "whisper"]
-    if device == "cpu":
-        args.append("-ng")
-    if prompt:
-        args += ["--prompt", prompt]
-    result = _run(args, out_dir, max(600, min(43200, duration * 10 + 300)), prefix)
+    if device == "auto":
+        from .system_components import cuda_ready
+        use_gpu = (gpu_ready or cuda_ready)()
+    else:
+        use_gpu = device == "cuda"
+    # The CPU is bound by threads; with the GPU a few are enough.
+    cpu_threads = max(threads, os.cpu_count() or threads)
+
+    def attempt(name, gpu):
+        # Windows' narrow argv in some official builds corrupts absolute CJK paths.
+        # The child cwd is set through CreateProcessW; project-internal relative
+        # arguments avoid that conversion without changing the system code page.
+        args = [str(whisper), "-m", os.path.relpath(model, out_dir),
+                "-f", os.path.relpath(audio, out_dir), "-l", language,
+                "-t", str(threads if gpu else cpu_threads), "-bs", str(beam_size), "-ojf", "-of", name]
+        if not gpu:
+            args.append("-ng")
+        if prompt:
+            args += ["--prompt", prompt]
+        return out_dir / name, _run(args, out_dir, max(600, min(43200, duration * 10 + 300)), out_dir / name)
+
+    gpu_failure = None
+    try:
+        prefix, result = attempt("whisper", use_gpu)
+    except MediaError as exc:
+        # A driver that looks ready can still fail (an old card, too little memory).
+        if device != "auto" or not use_gpu:
+            raise
+        gpu_failure, use_gpu = str(exc)[-500:], False
+        prefix, result = attempt("whisper-cpu", False)
+    raw_path = prefix.with_suffix(".json")
     log = (result.stdout + b"\n" + result.stderr).decode("utf-8", errors="replace")
-    evidence = _gpu_evidence(log)
+    evidence = _gpu_evidence(log) if use_gpu else []
     if device == "cuda" and not evidence:
         raise MediaError("CUDA was requested, but successful CUDA backend and model allocation "
                          f"were not verified. Raw output/logs retained in {out_dir}")
@@ -216,11 +239,15 @@ def transcribe(whisper: Path, model: Path, audio: Path, out_dir: Path,
     except (ValueError, UnicodeError) as exc:
         raise MediaError(f"Invalid whisper.cpp JSON: {raw_path}") from exc
     data = _normalize_transcript(raw, language)
-    data.update({"requested_device": device, "actual_device": device,
+    actual = "cuda" if evidence else "cpu"
+    data.update({"requested_device": device, "actual_device": actual,
+                 "threads": threads if use_gpu else cpu_threads,
                  "beam_size": beam_size, "prompt_applied": bool(prompt),
                  "backend_evidence": evidence, "raw_json": str(raw_path),
                  "stdout_log": str(prefix.with_suffix(".stdout.log")),
                  "stderr_log": str(prefix.with_suffix(".stderr.log"))})
+    if gpu_failure:
+        data["gpu_failure"] = gpu_failure
     normalized_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return data
 

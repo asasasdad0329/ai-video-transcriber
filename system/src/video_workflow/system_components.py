@@ -54,13 +54,18 @@ def _word():
         return False
 
 
+def cuda_ready(run=subprocess.run):
+    cuda = _driver_cuda(run)
+    return cuda is not None and cuda >= MIN_DRIVER_CUDA
+
+
 def check(run=subprocess.run):
     missing = [name for name in VC_RUNTIME if not (_system32() / name).is_file()]
     cuda = _driver_cuda(run)
     browser = _browser()
     return {
         "vc_runtime": {"need": "必要", "ok": not missing, "missing": missing},
-        "nvidia_driver": {"need": "建議；沒有時用 --device cpu", "ok": cuda is not None and cuda >= MIN_DRIVER_CUDA,
+        "nvidia_driver": {"need": "建議；沒有時語音辨識自動改用 CPU，較慢", "ok": cuda is not None and cuda >= MIN_DRIVER_CUDA,
                           "driver_cuda": ".".join(map(str, cuda)) if cuda else None},
         "browser": {"need": "製作講義時必要", "ok": browser is not None, "path": browser},
         "word": {"need": "選用（講義預覽）", "ok": _word()},

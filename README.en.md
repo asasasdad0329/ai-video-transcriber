@@ -8,7 +8,7 @@ Video Transcript & Handout Workflow (影片轉逐字稿與講義) is a Windows t
 | --- | --- |
 | Purpose | Chinese lecture videos → transcript, data card, handout |
 | Platform | Windows 11 (Windows 10 untested), Windows PowerShell 5.1 |
-| Hardware | NVIDIA GPU recommended; CPU-only works, more slowly |
+| Hardware | NVIDIA GPU recommended; without one the CPU is used automatically, more slowly |
 | Speech recognition | whisper.cpp b4938 with the large-v3-turbo (q5_0) model |
 | Screen text | Scene-change plus fixed-interval frame sampling, RapidOCR on CPU |
 | Output | Transcript `.md`, data card `.md`, handout `.docx` |
@@ -54,7 +54,7 @@ These components have to be installed on the system and cannot live inside the p
 | Component | Used for | Need | How to install |
 | --- | --- | --- | --- |
 | Microsoft Visual C++ 2015–2022 Redistributable (x64) | Running whisper.cpp | Required | `winget install --id Microsoft.VCRedist.2015+.x64 -e`, or run the [official Microsoft installer](https://aka.ms/vs/17/release/vc_redist.x64.exe). Requires administrator rights. |
-| NVIDIA display driver (CUDA 11.8 or later) | GPU speech recognition | Recommended; otherwise use `--device cpu` | No winget package. Install from [NVIDIA driver downloads](https://www.nvidia.com/Download/index.aspx) or the NVIDIA App for your GPU model. The agent can identify the model with `nvidia-smi` or `Get-CimInstance Win32_VideoController` and open the download page; the installer needs administrator rights and may require a restart. |
+| NVIDIA display driver (CUDA 11.8 or later) | GPU speech recognition | Recommended; otherwise the CPU is used automatically | No winget package. Install from [NVIDIA driver downloads](https://www.nvidia.com/Download/index.aspx) or the NVIDIA App for your GPU model. The agent can identify the model with `nvidia-smi` or `Get-CimInstance Win32_VideoController` and open the download page; the installer needs administrator rights and may require a restart. |
 | Microsoft Edge or Google Chrome | Rendering Mermaid diagrams in handouts | Required for handouts | Edge ships with Windows 11. If missing: `winget install --id Microsoft.Edge -e` or `winget install --id Google.Chrome -e`. |
 | Microsoft Word | Handout preview (PDF export) | Optional; the preview is skipped without it | Needs a Microsoft 365 / Office license; the agent does not install it. |
 
@@ -254,7 +254,7 @@ The agent runs whatever it needs; these are the commands you are most likely to 
 .\run.ps1 list-runs                  # list transcription tasks
 .\run.ps1 status <run_dir>           # re-check whether a transcription task is complete
 .\run.ps1 process <video path>       # local processing only (speech recognition, frames, OCR)
-.\run.ps1 process <video path> --device cpu   # use the CPU when there is no NVIDIA GPU
+.\run.ps1 process <video path> --device cpu   # force the CPU (chosen automatically by default)
 .\run.ps1 doctor                     # check the environment and system components
 .\run.ps1 test                       # run the tests
 ```
@@ -265,7 +265,7 @@ The agent runs whatever it needs; these are the commands you are most likely to 
 It is tested with Claude Code and Codex. In principle any model and agent harness with tool calling (running commands, reading and writing files) and image understanding works: the rules are in AGENTS.md and every operation goes through `run.ps1`. If the harness provides no session ID, the agent passes a stable `--task-id`.
 
 **Does it work without an NVIDIA GPU?**
-Yes. Add `--device cpu` to run speech recognition on the CPU, which is much slower. OCR always runs on the CPU.
+Yes. Without a supported NVIDIA GPU, speech recognition switches to the CPU automatically; nothing needs to be set. Speed depends on the processor: on a 12-thread CPU it takes about as long as the video itself, roughly 20 times slower than the GPU. OCR always runs on the CPU.
 
 **Is my video uploaded anywhere?**
 Speech recognition, frame sampling and OCR run locally, and the video itself is not uploaded. The flagged passages, frames and the one full read that the agent works with are sent to whichever AI service you use.

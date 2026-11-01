@@ -41,7 +41,7 @@ class SystemComponentTests(unittest.TestCase):
         self.assertTrue(components.check()["vc_runtime"]["ok"])
 
     def test_driver_must_support_cuda_11_8(self):
-        self.assertEqual(components.check()["nvidia_driver"], {"need": "建議；沒有時用 --device cpu", "ok": False,
+        self.assertEqual(components.check()["nvidia_driver"], {"need": "建議；沒有時語音辨識自動改用 CPU，較慢", "ok": False,
                                                                "driver_cuda": None})
         for version, expected in (("12.4", True), ("11.8", True), ("11.4", False)):
             run = self.smi(f"| NVIDIA-SMI 551.86   Driver Version: 551.86   CUDA Version: {version}     |")

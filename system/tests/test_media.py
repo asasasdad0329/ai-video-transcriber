@@ -97,9 +97,74 @@ class MediaAdapterTests(unittest.TestCase):
             (output / "whisper.json").write_text('{"transcription": []}', encoding="utf-8")
             return subprocess.CompletedProcess([], 0, b"", b"no GPU found")
         with patch.object(media, "_run", side_effect=fake_run), self.assertRaises(media.MediaError):
-            media.transcribe(self.exe, model, audio, output)
+            media.transcribe(self.exe, model, audio, output, device="cuda")
         self.assertTrue((output / "whisper.json").is_file())
         self.assertFalse((output / "transcript.json").exists())
+
+    def _speech(self):
+        audio = self.root / "speech.wav"
+        with wave.open(str(audio), "wb") as wav:
+            wav.setnchannels(1)
+            wav.setsampwidth(2)
+            wav.setframerate(16000)
+            wav.writeframes(b"\0\0" * 160)
+        model = self.root / "model.bin"
+        model.touch()
+        return model, audio
+
+    def _whisper(self, output, results):
+        calls = []
+        def fake_run(args, cwd, timeout, prefix):
+            calls.append(args)
+            outcome = results[len(calls) - 1]
+            if isinstance(outcome, Exception):
+                raise outcome
+            (output / (args[args.index("-of") + 1] + ".json")).write_text('{"transcription": []}', encoding="utf-8")
+            return subprocess.CompletedProcess(args, 0, b"", outcome)
+        return calls, fake_run
+
+    def test_auto_device_without_driver_runs_on_all_cpu_threads(self):
+        model, audio = self._speech()
+        output = self.root / "asr"
+        calls, fake_run = self._whisper(output, [b"no GPU found"])
+        with patch.object(media, "_run", side_effect=fake_run), patch.object(media.os, "cpu_count", return_value=12):
+            result = media.transcribe(self.exe, model, audio, output, gpu_ready=lambda: False)
+        self.assertIn("-ng", calls[0])
+        self.assertEqual(calls[0][calls[0].index("-t") + 1], "12")
+        self.assertEqual((result["requested_device"], result["actual_device"], result["threads"]), ("auto", "cpu", 12))
+
+    def test_auto_device_records_the_device_that_actually_ran(self):
+        gpu_log = b"using CUDA0 backend\nCUDA0 total size = 1450.50 MB"
+        for log, actual in ((gpu_log, "cuda"), (b"failed to initialize CUDA: no CUDA-capable device is detected", "cpu")):
+            with self.subTest(actual=actual):
+                model, audio = self._speech()
+                output = self.root / ("asr-" + actual)
+                calls, fake_run = self._whisper(output, [log])
+                with patch.object(media, "_run", side_effect=fake_run):
+                    result = media.transcribe(self.exe, model, audio, output, gpu_ready=lambda: True)
+                self.assertNotIn("-ng", calls[0])
+                self.assertEqual(result["actual_device"], actual)
+
+    def test_auto_device_retries_on_the_cpu_when_the_gpu_run_fails(self):
+        model, audio = self._speech()
+        output = self.root / "asr"
+        calls, fake_run = self._whisper(output, [media.MediaError("whisper-cli.exe exited 1: out of memory"), b"no GPU found"])
+        with patch.object(media, "_run", side_effect=fake_run):
+            result = media.transcribe(self.exe, model, audio, output, gpu_ready=lambda: True)
+        self.assertEqual(len(calls), 2)
+        self.assertIn("-ng", calls[1])
+        self.assertEqual(calls[1][calls[1].index("-of") + 1], "whisper-cpu")
+        self.assertEqual(result["actual_device"], "cpu")
+        self.assertIn("out of memory", result["gpu_failure"])
+        self.assertTrue(result["raw_json"].endswith("whisper-cpu.json"))
+
+    def test_explicit_cuda_does_not_fall_back(self):
+        model, audio = self._speech()
+        output = self.root / "asr"
+        calls, fake_run = self._whisper(output, [media.MediaError("whisper-cli.exe exited 1: out of memory")])
+        with patch.object(media, "_run", side_effect=fake_run), self.assertRaises(media.MediaError):
+            media.transcribe(self.exe, model, audio, output, device="cuda")
+        self.assertEqual(len(calls), 1)
 
     def test_exact_pixel_duplicates_keep_timeline_and_ocr_source(self):
         output = self.root / "visuals"
