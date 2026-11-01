@@ -1,4 +1,5 @@
 import copy
+import json
 from pathlib import Path
 import sys
 import unittest
@@ -165,6 +166,14 @@ class FinalReviewTests(unittest.TestCase):
         self.assertEqual(baseline, (self.draft / "draft.json").read_bytes())
         self.assertFalse(list((self.run / "patches").glob("*.json")))
 
+    def test_candidate_map_shows_sections_without_the_text(self):
+        self.start()
+        mapped = cli._read(self.draft / "candidate-map.json")
+        self.assertEqual([section["section"] for section in mapped["sections"]],
+                         [f"#{n}" for n in range(1, len(mapped["sections"]) + 1)])
+        self.assertIn("screen-001", [card for section in mapped["sections"] for card in section["cards"]])
+        self.assertNotIn("錯字", json.dumps(mapped, ensure_ascii=False))
+
     def test_new_reading_edition_is_titled_after_the_video(self):
         state = cli._read(self.run / "state.json")
         self.assertTrue(cli._root_path(state["primary_transcript"]).read_text(encoding="utf-8")
@@ -316,12 +325,13 @@ class FinalReviewTests(unittest.TestCase):
 class LayoutTests(unittest.TestCase):
     """Cards and sections on a small draft, without a run."""
 
-    def draft(self, texts, sections):
+    def draft(self, texts, sections, shown):
+        # Segment n is spoken from n to n + 1 seconds; shown says when each slide was first sampled.
         return {"base": {"segments": [{"id": f"s{n}", "text": text, "start": n, "end": n + 1}
                                       for n, text in enumerate(texts, 1)]},
                 "prior_decisions": {}, "decisions": {},
-                "cards": [{"id": card, "title": card, "verbatim_text": card, "start": 0}
-                          for card in ("A", "B")],
+                "cards": [{"id": card, "title": card, "verbatim_text": card, "start": start}
+                          for card, start in shown.items()],
                 "layout": {"title": "片名", "sections": sections}, "revision": 0, "history": []}
 
     @staticmethod
@@ -329,12 +339,13 @@ class LayoutTests(unittest.TestCase):
         return [(section["title"], [block.get("card_id") or block["segment_ids"] for block in section["blocks"]])
                 for section in draft["layout"]["sections"]]
 
-    def test_card_shown_mid_sentence_moves_with_its_section_to_the_sentence_end(self):
+    def test_card_shown_late_in_a_sentence_moves_with_its_section_to_the_sentence_end(self):
         draft = self.draft(["接下來看這個架構", "它分成三層", "第一層是介面", "第二層是資料"], [
             {"title": "開場", "blocks": [{"segment_ids": ["s1"], "punctuation": {"s1": "，"}}]},
             {"title": "A", "blocks": [{"card_id": "A"},
                                       {"segment_ids": ["s2", "s3"], "punctuation": {"s2": "，", "s3": "。"}}]},
-            {"title": "B", "blocks": [{"card_id": "B"}, {"segment_ids": ["s4"], "punctuation": {"s4": "。"}}]}])
+            {"title": "B", "blocks": [{"card_id": "B"}, {"segment_ids": ["s4"], "punctuation": {"s4": "。"}}]}],
+            shown={"A": 3.9, "B": 4.5})
         moved = final._settle_cards(draft)
         self.assertEqual(moved, [{"card_id": "A", "moved_after_sentence_end": "s3"}])
         # The sentence the card cut is one paragraph again; the next card keeps its place.
@@ -347,15 +358,42 @@ class LayoutTests(unittest.TestCase):
         draft = self.draft(["先看", "這張圖", "說完了"], [
             {"title": "開場", "blocks": [{"segment_ids": ["s1"], "punctuation": {"s1": "，"}}]},
             {"title": "A", "blocks": [{"card_id": "A"}, {"segment_ids": ["s2"], "punctuation": {"s2": "，"}}]},
-            {"title": "B", "blocks": [{"card_id": "B"}, {"segment_ids": ["s3"], "punctuation": {"s3": "。"}}]}])
+            {"title": "B", "blocks": [{"card_id": "B"}, {"segment_ids": ["s3"], "punctuation": {"s3": "。"}}]}],
+            shown={"A": 3.6, "B": 3.9})
         final._settle_cards(draft)
         self.assertEqual(self.shape(draft), [("開場", [["s1", "s2", "s3"]]), ("A", ["A"]), ("B", ["B"])])
+
+    def test_cards_follow_the_punctuation_back_to_where_the_slide_appeared(self):
+        draft = self.draft(["先講這個", "然後看圖", "結束"], [
+            {"title": "開場", "blocks": [{"segment_ids": ["s1", "s2"], "punctuation": {"s1": "，", "s2": "。"}}]},
+            {"title": "A", "blocks": [{"card_id": "A"}, {"segment_ids": ["s3"], "punctuation": {"s3": "。"}}]}],
+            shown={"A": 3.2})
+        self.assertEqual(final._settle_cards(draft), [])
+        changed = final._edit_data(draft, {"punctuation": {"s1": "。"}}, set())
+        self.assertIn({"card_id": "A", "moved_after_sentence_end": "s1"}, changed)
+        self.assertEqual(self.shape(draft), [("開場", [["s1"]]), ("A", ["A", ["s2"], ["s3"]])])
+
+    def test_a_placed_card_keeps_its_place_unless_it_cuts_a_sentence(self):
+        draft = self.draft(["第一句", "第二句", "第三句"], [
+            {"title": "開場", "blocks": [{"segment_ids": ["s1", "s2"], "punctuation": {"s1": "，", "s2": "。"}}]},
+            {"title": "A", "blocks": [{"card_id": "A"}, {"segment_ids": ["s3"], "punctuation": {"s3": "。"}}]}],
+            shown={"A": 3.5})
+        final._edit_data(draft, {"card_before": {"A": "s2"}}, set())
+        self.assertEqual(self.shape(draft), [("開場", [["s1", "s2"]]), ("A", ["A", ["s3"]])])
+        final._edit_data(draft, {"punctuation": {"s1": "。"}}, set())
+        self.assertEqual(self.shape(draft), [("開場", [["s1", "s2"]]), ("A", ["A", ["s3"]])])
+
+    def test_a_pause_or_an_introducing_colon_lets_a_card_follow(self):
+        for text, closed in (("一天後……", True), ("指令如下：", True), ("他說「好。」", True),
+                             ("待確認〔？〕", False), ("然後這個東西是", False)):
+            self.assertEqual(reading.closes_sentence(text), closed, text)
 
     def test_card_before_carries_the_heading_and_null_merges_a_section(self):
         draft = self.draft(["第一句", "第二句", "第三句"], [
             {"title": "開場", "blocks": [{"segment_ids": ["s1"], "punctuation": {"s1": "。"}}]},
             {"title": "A", "blocks": [{"card_id": "A"}, {"segment_ids": ["s2"], "punctuation": {"s2": "。"}}]},
-            {"title": "B", "blocks": [{"card_id": "B"}, {"segment_ids": ["s3"], "punctuation": {"s3": "。"}}]}])
+            {"title": "B", "blocks": [{"card_id": "B"}, {"segment_ids": ["s3"], "punctuation": {"s3": "。"}}]}],
+            shown={"A": 1.5, "B": 4.2})
         final._edit_data(draft, {"card_before": {"A": "s3"}}, set())
         self.assertEqual(self.shape(draft), [("開場", [["s1"], ["s2"]]), ("A", ["A"]), ("B", ["B", ["s3"]])])
         final._edit_data(draft, {"section_titles": {"#3": None}}, set())

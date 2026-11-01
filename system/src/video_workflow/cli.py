@@ -999,7 +999,10 @@ def finalize_visuals(run_dir, document_path):
             if omission.get("reviewed") is not True:
                 raise ValueError("omissions require explicit model review; local labels are insufficient")
             fids = _refs(omission.get("frame_ids"), known, "omission.frame_ids", required=True)
-            _refs(omission.get("basis_frame_ids"), set(covered), "omission.basis_frame_ids", required=True)
+            # A redundant frame repeats a transcribed one; a decorative or subtitle-only
+            # frame may instead be judged from the omitted frames themselves.
+            basis = set(covered) | (set() if omission["decision"] == "redundant" else set(fids))
+            _refs(omission.get("basis_frame_ids"), basis, "omission.basis_frame_ids", required=True)
             omitted.extend(fids)
         if len(omitted) != len(set(omitted)) or set(omitted) & set(covered):
             raise ValueError("frames cannot be omitted twice or both omitted and transcribed")

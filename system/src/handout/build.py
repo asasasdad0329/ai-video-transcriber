@@ -5,6 +5,7 @@ import hashlib
 from pathlib import Path
 
 from PIL import Image
+import yaml
 
 import domains
 from workspace_paths import ROOT
@@ -27,10 +28,10 @@ def _span(ids):
 
 
 def template(doc):
-    lines = ["---", f"title: {doc['title'].split('｜')[0]}"]
-    if "｜" in doc["title"]:
-        lines.append(f"subtitle: {doc['title'].split('｜', 1)[1]}")
-    lines += ["---", ""]
+    title, _, subtitle = doc["title"].partition("｜")
+    meta = {"title": title, **({"subtitle": subtitle} if subtitle else {})}
+    # Dumped, not formatted: a title such as "[COSCUP 2012] …" must stay a string.
+    lines = ["---", yaml.safe_dump(meta, allow_unicode=True, sort_keys=False, width=4096).rstrip(), "---", ""]
     for section in doc["sections"]:
         speech = [b for b in section["blocks"] if doc["blocks"][b]["kind"] == "speech"]
         if speech:

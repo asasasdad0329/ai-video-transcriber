@@ -235,6 +235,13 @@ class DataCardTests(unittest.TestCase):
         self.assertNotIn("**", output)
         self.assertNotIn("made_by", output)
 
+    def test_handout_template_keeps_a_bracketed_title_a_string(self):
+        from handout.build import template
+        doc = make_doc()
+        doc["title"] = "[COSCUP 2012] 講題: 副標｜第二部"
+        meta, _ = hp.split_front_matter(template(doc))
+        self.assertEqual((meta["title"], meta["subtitle"]), ("[COSCUP 2012] 講題: 副標", "第二部"))
+
     def test_screen_note_moves_from_the_card_text_to_front_matter(self):
         shown, notes = source.screen_notes("原局  \n舉例\n\n畫面註：右上角小字被遮住")
         self.assertEqual((shown, notes), ("原局  \n舉例", ["右上角小字被遮住"]))

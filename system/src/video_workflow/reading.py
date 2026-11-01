@@ -15,12 +15,14 @@ _PUNCTUATION = set("，。？！；：、…—,.!?;:")
 DEFAULT_TITLE = "逐字稿與畫面"
 UNRESOLVED = "〔？〕"
 _SENTENCE_END = ("。", "？", "！", ".", "?", "!")
+# A card may also follow a trailing pause (……) or words that introduce it (如下：).
+_CARD_BREAK = _SENTENCE_END + ("…", "：", ":")
 _CLOSING = "\"'」』）】》”’"
 
 
 def closes_sentence(text):
-    """Whether rendered speech ends a sentence, looking past a 〔？〕 and closing quotes."""
-    return text.rstrip().removesuffix(UNRESOLVED).rstrip(_CLOSING).endswith(_SENTENCE_END)
+    """Whether a card may follow this rendered speech, looking past a 〔？〕 and closing quotes."""
+    return text.rstrip().removesuffix(UNRESOLVED).rstrip(_CLOSING).endswith(_CARD_BREAK)
 
 
 def speech_piece(text, decision, ending, convert):

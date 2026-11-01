@@ -229,11 +229,12 @@ def _split_at(items, segment_id, offset):
     return index + 1
 
 
-def _move_card(layout, card_id, before=None, after=None, ends=None):
-    """Move a card, with the section it opens, before or after a segment (neither: to the end).
+def _move_card(layout, card_id, before, ends):
+    """Place a card, with the section it opens, before a segment (None: at the end).
 
-    Given the sentence ends, speech the card used to cut mid-sentence becomes
-    one paragraph again.
+    The card keeps that place from then on (settling only moves it on to the
+    end of a sentence it would cut), and speech it used to cut mid-sentence
+    becomes one paragraph again.
     """
     items = _flatten(layout)
     positions = [index for index, item in enumerate(items) if item.get("card_id") == card_id]
@@ -242,22 +243,21 @@ def _move_card(layout, card_id, before=None, after=None, ends=None):
     end = positions[0] + 1
     start = end - 2 if end > 1 and "heading" in items[end - 2] else end - 1
     unit = items[start:end]
+    unit[-1]["placed"] = True
     del items[start:end]
-    if (ends is not None and 0 < start < len(items) and "segment_ids" in items[start - 1]
-            and "segment_ids" in items[start] and items[start - 1]["segment_ids"][-1] not in ends):
+    if (0 < start < len(items) and "segment_ids" in items[start - 1] and "segment_ids" in items[start]
+            and items[start - 1]["segment_ids"][-1] not in ends):
         left, right = items[start - 1], items.pop(start)
         left["segment_ids"] = left["segment_ids"] + right["segment_ids"]
         left["punctuation"] = {**left.get("punctuation", {}), **right.get("punctuation", {})}
-    if after is not None:
-        index = _split_at(items, after, 1)
-    elif before is not None:
+    if before is None:
+        index = len(items)
+    else:
         index = _split_at(items, before, 0)
         # Right after the speech before the target, ahead of any heading or card
         # that opens the target's section.
         while index and "segment_ids" not in items[index - 1]:
             index -= 1
-    else:
-        index = len(items)
     items[index:index] = unit
     _regroup(layout, items)
 
@@ -276,27 +276,81 @@ def _sentence_ends(draft):
 
 
 def _settle_cards(draft):
-    """Move each card shown mid-sentence, with its section, to where that sentence ends.
+    """Put every card, with the section it opens, at an edge of the sentence it appeared in.
 
-    The slide often changes while the speaker is still talking; the reading
-    edition finishes the sentence first. A sentence with no end after the card
-    is left for seal-draft to report.
+    The slide often changes while the speaker is mid-sentence, and the reading
+    edition never splits that sentence: the card goes before it when the slide
+    appeared nearer its start, after it when nearer its end. Recomputed after
+    every change, cards follow the punctuation both ways. A card placed with
+    card_before keeps its place unless that cuts a sentence, then moves on to
+    the sentence's end; a sentence with no end is left for seal-draft.
     """
     ends = _sentence_ends(draft)
+    segments = draft["base"]["segments"]
+    order = [segment["id"] for segment in segments]
+    rank = {sid: n for n, sid in enumerate(order)}
+    times = {card["id"]: card.get("start", 0.0) for card in draft["cards"]}
+    stay = object()
+
+    def sentence_end(n):
+        return next((m for m in range(n, len(order)) if order[m] in ends), None)
+
+    def by_time(card_id):
+        # Frames are sampled every couple of seconds, so a slide is first seen
+        # about a second after it appeared.
+        moment = times[card_id] - 1.0
+        anchor = next((n for n in range(len(segments) - 1, -1, -1) if segments[n]["start"] <= moment), None)
+        if anchor is None:
+            return None
+        first = anchor
+        while first and order[first - 1] not in ends:
+            first -= 1
+        last = sentence_end(anchor)
+        if last is None:
+            return stay
+        if moment - segments[first]["start"] <= segments[last]["end"] - moment:
+            return order[first - 1] if first else None
+        return order[last]
+
+    def pinned(after):
+        if after is None:
+            return None
+        last = sentence_end(rank[after])
+        return stay if last is None else order[last]
+
+    # Take every card out, rejoining speech a card cut mid-sentence.
+    kept, units, last, cut = [], [], None, False
     items = _flatten(draft["layout"])
-    moves, last = [], None
-    for index, item in enumerate(items):
-        if "segment_ids" in item:
-            last = item["segment_ids"][-1]
-        elif "card_id" in item and last is not None and last not in ends:
-            following = [sid for later in items[index + 1:] for sid in later.get("segment_ids", [])]
-            end = next((sid for sid in following if sid in ends), None)
-            if end:
-                moves.append({"card_id": item["card_id"], "moved_after_sentence_end": end})
-    # Each card lands right after its sentence's end; moving the later cards
-    # first keeps cards that share an end in their original order.
-    for move in reversed(moves):
-        _move_card(draft["layout"], move["card_id"], after=move["moved_after_sentence_end"], ends=ends)
+    index = 0
+    while index < len(items):
+        item = items[index]
+        size = 2 if "heading" in item and index + 1 < len(items) and "card_id" in items[index + 1] else 1
+        if "card_id" in items[index + size - 1]:
+            units.append((items[index + size - 1], last, items[index:index + size]))
+            cut = True
+        elif "segment_ids" in item and cut and kept and "segment_ids" in kept[-1] and last not in ends:
+            kept[-1]["segment_ids"] = kept[-1]["segment_ids"] + item["segment_ids"]
+            kept[-1]["punctuation"] = {**kept[-1].get("punctuation", {}), **item.get("punctuation", {})}
+            last, cut = item["segment_ids"][-1], False
+        else:
+            kept.append(item)
+            if "segment_ids" in item:
+                last, cut = item["segment_ids"][-1], False
+        index += size
+
+    moves, places = [], {}
+    for block, after, unit in units:
+        target = pinned(after) if block.get("placed") else by_time(block["card_id"])
+        if target is stay:
+            target = after
+        if target != after:
+            moves.append({"card_id": block["card_id"], "moved_after_sentence_end": target})
+        places.setdefault(target, []).append(unit)
+    for target, group in places.items():
+        group.sort(key=lambda unit: (times.get(unit[-1]["card_id"], 0.0), unit[-1]["card_id"]))
+        position = 0 if target is None else _split_at(kept, target, 1)
+        kept[position:position] = [item for unit in group for item in unit]
+    _regroup(draft["layout"], kept)
     return moves
 
 
@@ -489,7 +543,16 @@ def _save(directory, draft):
         readable.unlink()
     mapped = [{key: copy.deepcopy(value) for key, value in block.items() if key != "text"}
               for block in blocks]
-    api._write(directory / "candidate-map.json", {"blocks": mapped})
+    # Section titles come from the slides, not the speech, so the structure can be
+    # checked before sealing without exposing the candidate's text.
+    terms = draft["layout"].get("protected_terms", [])
+    sections = []
+    for number, section in enumerate(draft["layout"]["sections"], 1):
+        speech = [sid for block in section["blocks"] for sid in block.get("segment_ids", [])]
+        sections.append({"section": f"#{number}", "title": reading.traditional(section["title"], terms),
+                         "cards": [block["card_id"] for block in section["blocks"] if "card_id" in block],
+                         "speech": f"{speech[0]}–{speech[-1]}" if speech else None})
+    api._write(directory / "candidate-map.json", {"sections": sections, "blocks": mapped})
     api._write(directory / "draft.json", draft)
 
 

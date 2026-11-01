@@ -130,9 +130,16 @@ class WorkflowContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             cli.finalize_visuals(self.run, self.document(document))
         document["cards"] = document["cards"][:1]
-        document["omissions"][0]["basis_frame_ids"] = ["f000002"]
+        document["omissions"][0]["basis_frame_ids"] = ["f000099"]
         with self.assertRaises(ValueError):
             cli.finalize_visuals(self.run, self.document(document))
+        # A repeat must point at the transcribed frame it repeats ...
+        document["omissions"][0].update(decision="redundant", basis_frame_ids=["f000002"])
+        with self.assertRaises(ValueError):
+            cli.finalize_visuals(self.run, self.document(document))
+        # ... while a frame with nothing worth transcribing is judged from itself.
+        document["omissions"][0]["decision"] = "decorative"
+        cli.finalize_visuals(self.run, self.document(document))
 
     def decide_all(self, first_decision="keep"):
         patches = []

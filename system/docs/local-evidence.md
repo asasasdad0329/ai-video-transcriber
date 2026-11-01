@@ -83,7 +83,7 @@ focused-review 一次提供疑句、去重前後句、最接近的兩個畫面�
 }
 ```
 
-模型只寫群組 ID，程式展開組內未進卡片的 frame IDs。也可用 omissions 直接列 frame_ids。decision 只接受 redundant、decorative、subtitle_indexed；basis_frame_ids 必須是已轉錄卡片的實際看圖來源。不確定重要性或完整性就繼續取證，不能用省略決議掩蓋。覆蓋檢查拒絕漏掉原抽樣幀、重複、同時轉錄與省略；有省略時 all_sampled_frames_reviewed=false，保留省略紀錄，不聲稱逐幀看完。卡片仍應收錄必要的表格、箭頭與動作內容。
+模型只寫群組 ID，程式展開組內未進卡片的 frame IDs。也可用 omissions 直接列 frame_ids。decision 只接受 redundant、decorative、subtitle_indexed；basis_frame_ids 是判斷所依據、實際看過的幀：redundant 指向它重複的已轉錄卡片幀；decorative 與 subtitle_indexed 可以就是被省略的幀本身。不確定重要性或完整性就繼續取證，不能用省略決議掩蓋。覆蓋檢查拒絕漏掉原抽樣幀、重複、同時轉錄與省略；有省略時 all_sampled_frames_reviewed=false，保留省略紀錄，不聲稱逐幀看完。卡片仍應收錄必要的表格、箭頭與動作內容。
 
 ## 有來源的詞表
 
