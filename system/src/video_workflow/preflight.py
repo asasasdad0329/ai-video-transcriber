@@ -268,6 +268,10 @@ def preflight(transcript, bundle, patch_document, layout=None, cards=None):
         corrected, _ = review.apply_patches(copy.deepcopy(transcript), copy.deepcopy(patch_document), evidence)
     except (ValueError, TypeError, KeyError) as exc:
         _error(errors, "patch_document", str(exc))
+    for segment in corrected.get("segments", []) if isinstance(corrected.get("segments"), list) else []:
+        if isinstance(segment, dict) and review.BROKEN_CHARACTER in str(segment.get("text", "")):
+            _error(errors, f"segments.{segment.get('id')}", "still has a character speech recognition emitted "
+                   "only in part (�); correct it from the audio, or mark 〔？〕 when the audio does not settle it")
     if layout is not None:
         _layout_errors(corrected, [] if cards is None else cards, layout, errors)
     return {"ok": not errors, "errors": errors}

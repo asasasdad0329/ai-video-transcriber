@@ -158,6 +158,22 @@ class MediaAdapterTests(unittest.TestCase):
         self.assertIn("out of memory", result["gpu_failure"])
         self.assertTrue(result["raw_json"].endswith("whisper-cpu.json"))
 
+    def test_a_character_whisper_left_unfinished_goes_to_review_not_the_whole_run(self):
+        # Byte patterns from real runs: 瘤 cut after two of its three bytes, and a stray
+        # continuation byte after 银. Strict decoding used to fail the whole run on either.
+        model, audio = self._speech()
+        output = self.root / "asr"
+        raw = (b'{"transcription": ['
+               b'{"offsets": {"from": 0, "to": 1000}, "text": "\xe5\xad\x90\xe5\xae\xab\xe8\x82\x8c\xe7\x98",'
+               b' "tokens": [{"text": "\xe7\x98[_TT_50]", "p": 0.4}]},'
+               b'{"offsets": {"from": 1000, "to": 2000}, "text": "\xe9\x93\xb6\xb6\xe8\xa1\x8c", "tokens": []}]}')
+        def fake_run(args, cwd, timeout, prefix):
+            (output / "whisper.json").write_bytes(raw)
+            return subprocess.CompletedProcess(args, 0, b"", b"no GPU found")
+        with patch.object(media, "_run", side_effect=fake_run):
+            result = media.transcribe(self.exe, model, audio, output, gpu_ready=lambda: False)
+        self.assertEqual([s["text"] for s in result["segments"]], ["子宫肌�", "银�行"])
+
     def test_explicit_cuda_does_not_fall_back(self):
         model, audio = self._speech()
         output = self.root / "asr"

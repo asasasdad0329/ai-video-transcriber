@@ -921,6 +921,12 @@ def seal(directory, task_id=None, accept_visual_uncertainties=False):
                              "finishes and the card moves there by itself: " + detail)
         speech_blocks = [block for block in blocks if block.get("kind") == "speech"]
         visual_blocks = [block for block in blocks if block.get("kind") == "visual"]
+        broken = [block["segment_ids"] for block in speech_blocks
+                  if review.BROKEN_CHARACTER in block["text"]]
+        if broken:
+            where = ", ".join(ids[0] if len(ids) == 1 else f"{ids[0]}–{ids[-1]}" for ids in broken[:8])
+            raise ValueError("speech recognition emitted a character only in part (�) in " + where
+                             + "; correct it from the audio, or mark 〔？〕 when the audio does not settle it")
         focus_ids = focus.get("reviewed_segment_ids", [])
         focus_summary = {key: value for key, value in focus.items()
                          if key != "reviewed_segment_ids"}

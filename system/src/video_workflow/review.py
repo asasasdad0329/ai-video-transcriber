@@ -32,6 +32,8 @@ _SCRIPT_COMPARISON = OpenCC("t2s") if OpenCC is not None else None
 _CJK = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff]{2,12}")
 _NUMBER = re.compile(r"\d+(?:[.,:/%-]\d+)*|[零一二三四五六七八九十百千萬億兩〇]+(?:年|月|日|元|倍|成|個|次|%|％)")
 _WHISPER_CONTROL = re.compile(r"(?:\[_[A-Z][A-Z0-9_]*\]|<\|[^|]+\|>)")
+# What a character speech recognition emitted only in part becomes on reading (U+FFFD).
+BROKEN_CHARACTER = "�"
 _DEFAULTS = {
     "word_probability_threshold": 0.5,
     "min_low_probability_tokens": 1,
@@ -227,6 +229,8 @@ def triage(transcript: dict, visuals: dict, config: dict, glossary: list[str]) -
             reasons.append("phonetic_term_candidate")
         if not segment["text"].strip() and segment["end"] > segment["start"]:
             reasons.append("empty_transcript_segment")
+        if BROKEN_CHARACTER in segment["text"]:
+            reasons.append("broken_character")
         if reasons:
             candidate_ids = [item["evidence_id"] for item in candidates]
             evidence_ids = list(dict.fromkeys([frame["id"] for frame in nearby] + candidate_ids))

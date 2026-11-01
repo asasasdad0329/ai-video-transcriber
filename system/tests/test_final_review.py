@@ -61,6 +61,11 @@ class FinalReviewTests(unittest.TestCase):
         data.update(extra)
         return self.changes(data, name)
 
+    def test_seal_refuses_a_character_speech_recognition_left_unfinished(self):
+        self.start({"edits": [{"segment_id": "s000001", "new_text": "軟體�稿"}]})
+        with self.assertRaisesRegex(ValueError, "s000001"):
+            final.seal(self.draft, task_id="final-review-test")
+
     def test_one_patch_one_preflight_one_export_and_no_repeat_read(self):
         baseline = (self.run / "transcript.raw.json").read_bytes()
         self.start({"edits": [{"segment_id": "s000001", "new_text": "軟體初稿"}]})

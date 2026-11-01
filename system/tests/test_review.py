@@ -63,6 +63,11 @@ class TriageTests(unittest.TestCase):
         self.assertEqual([token["text"] for token in result["suspects"][0]["low_score_tokens"]], ["套件", "[GPU]"])
         self.assertEqual(result["stats"]["ignored_low_score_nontext_token_count"], len(controls))
 
+    def test_a_character_speech_recognition_left_unfinished_is_a_suspect(self):
+        source = {"segments": [{"id": "s", "start": 0, "end": 3, "text": "跟�行貸款", "tokens": []}]}
+        result = review.triage(source, {"frames": []}, {}, [])
+        self.assertEqual(result["suspects"][0]["reasons"], ["broken_character"])
+
     @unittest.skipIf(review.lazy_pinyin is None or review._SCRIPT_COMPARISON is None, "optional pypinyin/rapidfuzz/opencc unavailable")
     def test_phonetic_candidate_is_only_a_suggestion(self):
         source = {"segments": [{"id": "s", "start": 1, "end": 2, "text": "研究量子糾產", "tokens": []}]}

@@ -96,6 +96,19 @@ class PreflightTests(unittest.TestCase):
                 result = preflight.preflight(self.transcript, self.bundle, candidate)
                 self.assertEqual(result["ok"], expected, result)
 
+    def test_a_character_speech_recognition_left_unfinished_cannot_pass(self):
+        self.transcript["segments"][1]["text"] = "繼續�明"
+        self.bundle["segments"] = copy.deepcopy(self.transcript["segments"])
+        digest = hashlib.sha256(json.dumps(self.transcript, ensure_ascii=False,
+            sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+        self.bundle["transcript_sha256"] = self.decisions["transcript_sha256"] = digest
+        result = preflight.preflight(self.transcript, self.bundle, self.assembled())
+        self.assertFalse(result["ok"])
+        self.assertIn("segments.b", str(result["errors"]))
+        self.decisions["decisions"].append({"segment_id": "b", "decision": "correct", "new_text": "繼續說明",
+            "evidence_ids": ["f1"], "reason": "音訊確認是「說」。"})
+        self.assertTrue(preflight.preflight(self.transcript, self.bundle, self.assembled())["ok"])
+
     def test_preflight_preserves_every_input_and_accepts_valid_layout(self):
         document = self.assembled()
         before = copy.deepcopy((self.transcript, self.bundle, document, self.layout))

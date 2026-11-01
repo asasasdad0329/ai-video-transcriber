@@ -54,6 +54,8 @@
 
 focused-review 一次提供疑句、去重前後句、最接近的兩個畫面文字、候選／未解決議原本引用的畫面、已存在的精簡重辨與詞表提示。穩定資料區按組共用，字幕按時間提供；已被候選引用的幀保留完整 OCR。它不新跑 recheck。沒有明確選 ID 時不重開已解決項；明確選 ID 可以抽查原先未標疑點的句子。未解原因與證據保留，沒有足夠證據時用 expand_range 查更多，不靠縮小證據包猜答案。
 
+疑點理由 `broken_character` 表示語音辨識只吐出半個字，文字裡顯示為 �。依上下文、重辨或畫面證據改成正確的字；證據不足時標〔？〕。留著 � 的段落過不了 seal-draft，也過不了最後的預檢。
+
 同一 host session 只能執行一次 focused-review；收據依 session ID 寫入 run，並綁定 transcript、triage 與 visuals 雜湊。之後只對確有缺口的位置使用分頁 evidence-query，不重新取得另一份整批疑點包，也不讀 transcript.raw.json、transcript.corrected.json、review_state.json 或完整 segment／token JSON。八字內容使用 `--domain bazi`，供 seal-draft 在全文閱讀前自動保護命理干支字形；詞表提示仍使用 `--scope "八字命理"`。後續 session 接續同一任務時重用雜湊完全相符的既有整批收據；只有使用者另開實質新任務才重新執行整批局部檢核。
 
 補抽不是逐句字幕完整對齊；最接近畫面可能有字幕延遲或跨句。閱讀情境片段時同時考慮後續解說，不能只憑提示句決定是否錄入。維持全片概覽入口，防止漏掉未被語音提及的視覺內容。全文上下文校字只在 seal-draft 通過後進行一次，讀後問題合併成唯一批次。

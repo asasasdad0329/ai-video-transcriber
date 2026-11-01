@@ -68,7 +68,7 @@ section_titles 的鍵是目前的小節名（必須唯一），或 `#N`：全文
 .\run.ps1 seal-draft "<draft_dir>"
 ```
 
-`seal-draft` 是全文閱讀前的硬門檻。它確認整批 focused-review 已完成或既有 run 已有完整決議、所有本機疑點都有決定、畫面卡已定稿、可讀的畫面不確定項已消除、排版恰好涵蓋全部口述與圖卡、圖卡沒有插進未完成句子、正規化設定與 protected_terms 已鎖定。命理欄位或多組干支會自動啟用 bazi domain，保護干支及獨立表格中的地支字形；整批 focused-review 仍可明示 `--domain bazi`，`--scope` 只用於校字詞表。所有檢查結果、來源雜湊、候選雜湊與 revision 寫入 seal receipt。
+`seal-draft` 是全文閱讀前的硬門檻。它確認整批 focused-review 已完成或既有 run 已有完整決議、所有本機疑點都有決定、畫面卡已定稿、可讀的畫面不確定項已消除、排版恰好涵蓋全部口述與圖卡、圖卡沒有插進未完成句子、沒有殘留語音辨識只吐出半個字的 �、正規化設定與 protected_terms 已鎖定。命理欄位或多組干支會自動啟用 bazi domain，保護干支及獨立表格中的地支字形；整批 focused-review 仍可明示 `--domain bazi`，`--scope` 只用於校字詞表。所有檢查結果、來源雜湊、候選雜湊與 revision 寫入 seal receipt。
 
 封存成功後，候選進入 `final_candidate_ready`，一般 `edit-draft`、換 layout 或重建候選都被拒絕。若門檻回報缺漏，回到 staging 一次補齊所有項目，再封存；此時尚未消耗全文閱讀。
 

@@ -235,8 +235,11 @@ def transcribe(whisper: Path, model: Path, audio: Path, out_dir: Path,
     if not raw_path.is_file():
         raise MediaError("whisper.cpp returned success without producing JSON")
     try:
-        raw = json.loads(raw_path.read_text(encoding="utf-8-sig"))
-    except (ValueError, UnicodeError) as exc:
+        # Whisper's byte-level tokens now and then cut a character short or add a stray
+        # byte, and whisper.cpp writes the bytes as they are. Each broken run becomes
+        # U+FFFD, so one character goes to review instead of the whole run failing.
+        raw = json.loads(raw_path.read_bytes().decode("utf-8-sig", errors="replace"))
+    except ValueError as exc:
         raise MediaError(f"Invalid whisper.cpp JSON: {raw_path}") from exc
     data = _normalize_transcript(raw, language)
     actual = "cuda" if evidence else "cpu"
