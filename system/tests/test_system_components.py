@@ -51,6 +51,12 @@ class SystemComponentTests(unittest.TestCase):
         run = self.smi("| NVIDIA-SMI 610.88   KMD Version: 610.88   CUDA UMD Version: 13.3     |")
         self.assertEqual(components.check(run)["nvidia_driver"]["driver_cuda"], "13.3")
 
+    def test_gpu_ocr_needs_a_driver_for_cuda_13(self):
+        for version, speech, ocr in (("12.4", True, False), ("13.0", True, True)):
+            run = self.smi(f"| NVIDIA-SMI 551.86   Driver Version: 551.86   CUDA Version: {version}     |")
+            with self.subTest(version=version):
+                self.assertEqual((components.cuda_ready(run), components.gpu_ocr_ready(run)), (speech, ocr))
+
     def test_browser_found_in_any_standard_location(self):
         self.assertFalse(components.check()["browser"]["ok"])
         edge = self.root / "pf86/Microsoft/Edge/Application/msedge.exe"

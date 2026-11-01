@@ -16,7 +16,7 @@ import uuid
 from urllib.parse import quote
 import wave
 
-from . import compact, media, review
+from . import compact, eta, media, review
 import workspace_paths as locations
 
 ROOT = locations.ROOT
@@ -24,6 +24,19 @@ ROOT = locations.ROOT
 
 def _now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def _progress(message):
+    # One line per stage on stderr; stdout stays a single JSON result.
+    print(message, file=sys.stderr, flush=True)
+
+
+def _planned_devices(config):
+    from .system_components import cuda_ready
+    asr = config.get("device", "auto")
+    if asr == "auto":
+        asr = "cuda" if cuda_ready() else "cpu"
+    return {"asr": asr, "visuals": media.choose_ocr_device(config.get("ocr_device", "auto"))}
 
 
 def _review_task_id(explicit=None):
@@ -722,6 +735,15 @@ def process(source, language=None, device=None, interval=None, *, resume_run=Non
             _write(run / "probe.json", media.probe(tools["ffprobe"], source))
             return [run / "probe.json"]
         _stage(run, state, "probe", do_probe)
+        remaining = [name for name in ("asr", "visuals") if not _stage_valid(run, state["stages"].get(name, {}))]
+        minutes = float(_read(run / "probe.json").get("duration") or 0) / 60
+        plan, based_on = eta.estimate(ROOT / locations.RUNS, minutes, _planned_devices(config), remaining)
+        if remaining:
+            labels = {"asr": "語音辨識", "visuals": "抽圖與 OCR"}
+            parts = "、".join(f"{labels[name]}：{eta.describe(plan[name])}" for name in remaining)
+            basis = f"依本機最近 {based_on} 次紀錄" if based_on else "依預設值，本機累積 3 次紀錄後改用實測"
+            _progress(f"本機處理開始：影片 {minutes:.0f} 分鐘，預計{parts}，合計{eta.describe(sum(plan.values()))}（{basis}）。"
+                      "請等在這個命令上，用工具允許的最長單次等待，不要固定秒數輪詢；每個階段完成會再印一行。")
         def do_audio(attempt):
             temporary = run / "work" / f"audio-{attempt:03d}.wav"
             media.extract_audio(tools["ffmpeg"], source, temporary)
@@ -743,10 +765,15 @@ def process(source, language=None, device=None, interval=None, *, resume_run=Non
             _write(run / "transcript.raw.json", transcript)
             return [run / "transcript.raw.json"] + list(out.glob("*.json")) + list(out.glob("*.log"))
         _stage(run, state, "asr", do_asr)
+        if "asr" in remaining:
+            seconds = eta.elapsed(state["stages"]["asr"]) or 0
+            rest = f"，抽圖與 OCR 進行中，預計還要{eta.describe(plan['visuals'])}" if "visuals" in remaining else ""
+            _progress(f"語音辨識完成（{state.get('asr_device', '?')}，{eta.describe(seconds)}）{rest}。")
         def do_visuals(attempt):
             out = run / "work" / f"visuals-{attempt:03d}"
             visuals = media.extract_visuals(tools["ffmpeg"], source, out, config.get("frame_interval", 10),
-                                            config.get("dedup_threshold", 5))
+                                            config.get("dedup_threshold", 5), ocr_device=config.get("ocr_device", "auto"))
+            state["ocr_device"] = visuals.get("device", "cpu")
             for frame in visuals["frames"]:
                 frame["path"] = _portable(frame["path"])
             for key, path in visuals.get("model_paths", {}).items():
@@ -755,6 +782,9 @@ def process(source, language=None, device=None, interval=None, *, resume_run=Non
             _write(run / "visuals.json", visuals)
             return [run / "visuals.json"] + list(out.rglob("*.png"))
         _stage(run, state, "visuals", do_visuals)
+        if "visuals" in remaining:
+            seconds = eta.elapsed(state["stages"]["visuals"]) or 0
+            _progress(f"抽圖與 OCR 完成（{state.get('ocr_device', 'cpu')}，{eta.describe(seconds)}），整理疑點中。")
         def do_triage(attempt):
             result = review.triage(_read(run / "transcript.raw.json"), _read(run / "visuals.json"), config, _glossary())
             _write(run / "triage.json", result)
@@ -1204,12 +1234,17 @@ def doctor():
         checks["tools"][key] = {"path": str(path), "exists": path.is_file()}
     model = _root_path(config["model"])
     checks["model"] = {"path": str(model), "exists": model.is_file(), "bytes": model.stat().st_size if model.is_file() else None}
-    checks["packages"] = {}
-    for name in ("rapidocr-onnxruntime", "onnxruntime", "Pillow", "pypinyin", "rapidfuzz"):
-        try:
-            checks["packages"][name] = importlib.metadata.version(name)
-        except importlib.metadata.PackageNotFoundError:
-            checks["packages"][name] = None
+    def version(*names):
+        for name in names:
+            try:
+                return importlib.metadata.version(name)
+            except importlib.metadata.PackageNotFoundError:
+                pass
+        return None
+    # onnxruntime is the CPU build by default, or the CUDA build after setup-gpu-ocr.
+    checks["packages"] = {name: version(*alternatives) for name, alternatives in (
+        ("rapidocr-onnxruntime", ("rapidocr-onnxruntime",)), ("onnxruntime", ("onnxruntime", "onnxruntime-gpu")),
+        ("Pillow", ("Pillow",)), ("pypinyin", ("pypinyin",)), ("rapidfuzz", ("rapidfuzz",)))}
     whisper_dir = _root_path(config["tools"]["whisper"]).parent
     checks["cublas"] = {"exists": all((whisper_dir / name).is_file() for name in ("cublas64_11.dll", "cublasLt64_11.dll"))}
     # System-level components are reported, never installed; see AGENTS.md for the approval route.
@@ -1220,6 +1255,14 @@ def doctor():
                        and checks["system"]["vc_runtime"]["ok"])
     # process --device auto follows the driver check; status shows what each run actually used.
     checks["asr_device"] = "gpu" if checks["system"]["nvidia_driver"]["ok"] else "cpu"
+    checks["ocr_device"] = "gpu" if media.choose_ocr_device(config.get("ocr_device", "auto")) == "cuda" else "cpu"
+    installed = version("onnxruntime-gpu") is not None
+    try:
+        chosen = json.loads((ROOT / ".runtime/gpu-ocr.json").read_text(encoding="utf-8")).get("enabled")
+    except (OSError, ValueError):
+        chosen = None
+    checks["gpu_ocr"] = {"installed": installed, "chosen": chosen,
+                         "offer": system_components.gpu_ocr_ready() and not installed and chosen is None}
     return checks
 
 

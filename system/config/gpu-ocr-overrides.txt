@@ -1,0 +1,2 @@
+# rapidocr-onnxruntime asks for the CPU build; the CUDA build provides the same module.
+onnxruntime ; sys_platform == "never"

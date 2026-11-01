@@ -39,7 +39,7 @@ All three workflows were run on a Creative Commons video: the COSCUP 2012 lightn
 
 | Stage | Result |
 | --- | --- |
-| Local processing | Speech recognition in 13 seconds (GPU: RTX 3070, 8 GB); 180 frames extracted, OCR in about 2 min 15 s (CPU) |
+| Local processing | Speech recognition in 13 seconds (GPU: RTX 3070, 8 GB); 180 frames extracted, frames and OCR in about 2 min 15 s (CPU), about 48 s with the optional GPU OCR |
 | Transcript | 40 sections and 39 screen cards; 3 unclear words marked 〔？〕 |
 | Data card | 7 sections with a table of contents, a representative sentence per section, keywords and a list of things to verify |
 | Handout | 8 chapters on 13 DOCX pages, with 10 screenshots and 1 Mermaid flowchart |
@@ -176,7 +176,10 @@ Open PowerShell in the project root:
 .\run.ps1 setup-publish   # data cards and handouts: python-docx, Playwright, Mermaid
 .\run.ps1 doctor          # check the transcription environment and system components
 .\run.ps1 publish-doctor  # check the data card and handout environment
+.\run.ps1 setup-gpu-ocr   # optional: GPU OCR for NVIDIA graphics cards (about 1.9 GB)
 ```
+
+When it finds an NVIDIA driver that supports CUDA 13, setup asks whether to add GPU OCR; the default is no. With it, frame sampling and OCR run about twice as fast with the same recognized text, and the CPU takes over automatically if the GPU cannot be used. `.\run.ps1 setup-gpu-ocr --remove` switches back to CPU OCR.
 
 The first command of any kind installs the project's own uv and Python into `.runtime/` (about 50 MB). If PowerShell says running scripts is disabled, or you are in cmd or Git Bash, use `.\run.cmd` instead of `.\run.ps1` with the same arguments.
 
@@ -191,7 +194,7 @@ These components have to be installed on the system and cannot live inside the p
 | Component | Used for | Need | How to install |
 | --- | --- | --- | --- |
 | Microsoft Visual C++ 2015–2022 Redistributable (x64) | Running whisper.cpp | Required | `winget install --id Microsoft.VCRedist.2015+.x64 -e`, or run the [official Microsoft installer](https://aka.ms/vs/17/release/vc_redist.x64.exe). Requires administrator rights. |
-| NVIDIA display driver (CUDA 11.8 or later) | GPU speech recognition | Recommended; otherwise the CPU is used automatically | No winget package. Install from [NVIDIA driver downloads](https://www.nvidia.com/Download/index.aspx) or the NVIDIA App for your GPU model. The agent can identify the model with `nvidia-smi` or `Get-CimInstance Win32_VideoController` and open the download page; the installer needs administrator rights and may require a restart. |
+| NVIDIA display driver (CUDA 11.8 or later) | GPU speech recognition; the optional GPU OCR needs CUDA 13 | Recommended; otherwise the CPU is used automatically | No winget package. Install from [NVIDIA driver downloads](https://www.nvidia.com/Download/index.aspx) or the NVIDIA App for your GPU model. The agent can identify the model with `nvidia-smi` or `Get-CimInstance Win32_VideoController` and open the download page; the installer needs administrator rights and may require a restart. |
 | Microsoft Edge or Google Chrome | Rendering Mermaid diagrams in handouts | Required for handouts | Edge ships with Windows 11. If missing: `winget install --id Microsoft.Edge -e` or `winget install --id Google.Chrome -e`. |
 | Microsoft Word | Handout preview (PDF export) | Optional; the preview is skipped without it | Needs a Microsoft 365 / Office license; the agent does not install it. |
 
@@ -272,6 +275,12 @@ Yes. Edit the primary transcript in `工作資料/輸出/逐字稿/` directly. T
 **Why does the agent ask me for a request code?**
 Changing the transcript, overwriting or deleting outputs, and installing system components can lose content or change your computer. The code ties your approval to the one request in front of you, so an earlier approval is never applied to a new action.
 
+**Can OCR run on the GPU?**
+Yes, as an optional install: an NVIDIA card with a driver that supports CUDA 13, then `.\run.ps1 setup-gpu-ocr` (about 1.9 GB). Frame sampling and OCR run about twice as fast with the same recognized text. It is off by default because the download is large, speech recognition already uses the GPU, and OCR is only part of local processing.
+
+**Does processing make the agent keep checking?**
+`process` starts by estimating how long it will take from this computer's past runs and prints one line as each stage finishes. Under the project rules the agent waits on the command instead of checking every few seconds.
+
 **What if speech recognition outputs only part of a character?**
 Whisper occasionally emits only part of a character. The program shows it as �, flags it for the agent to correct from the evidence, or to mark 〔？〕 when it can't. A draft that still contains � is never delivered.
 
@@ -331,6 +340,7 @@ The agent runs whatever it needs; these are the commands you are most likely to 
 .\run.ps1 process <video path>       # local processing only (speech recognition, frames, OCR)
 .\run.ps1 process <video path> --device cpu   # force the CPU (chosen automatically by default)
 .\run.ps1 doctor                     # check the environment and system components
+.\run.ps1 setup-gpu-ocr              # optional GPU OCR; add --remove to go back to CPU OCR
 .\run.ps1 test                       # run the tests
 ```
 
@@ -349,8 +359,10 @@ Setup downloads these from their official release locations; they are not includ
 | [Whisper](https://github.com/openai/whisper) large-v3-turbo (ggml q5_0) | — | MIT |
 | [uv](https://github.com/astral-sh/uv) | 0.12.13 | MIT / Apache-2.0 |
 | [Mermaid](https://github.com/mermaid-js/mermaid) | 11.17.2 | MIT |
+| [ONNX Runtime GPU](https://onnxruntime.ai/) (optional) | 1.31.1 | MIT |
+| NVIDIA CUDA runtime, cuBLAS, cuDNN and related libraries (optional, the nvidia-* packages on PyPI) | CUDA 13.4, cuDNN 9.27 | NVIDIA software license |
 
-Python package versions are pinned in [requirements.lock.txt](system/config/requirements.lock.txt) and [publish-requirements.lock.txt](system/config/publish-requirements.lock.txt), under each package's own license.
+Python package versions are pinned in [requirements.lock.txt](system/config/requirements.lock.txt), [gpu-ocr-requirements.lock.txt](system/config/gpu-ocr-requirements.lock.txt) (optional) and [publish-requirements.lock.txt](system/config/publish-requirements.lock.txt), under each package's own license.
 
 </details>
 

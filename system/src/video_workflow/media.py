@@ -278,7 +278,31 @@ def _pixel_hash(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _ocr_engine():
+def choose_ocr_device(requested: str = "auto", *, providers=None, gpu_ready=None) -> str:
+    """'cuda' only when the optional GPU OCR package is installed and the driver is ready.
+
+    The default install has the CPU build of ONNX Runtime, so "auto" means CPU
+    there; `setup-gpu-ocr` swaps in the CUDA build on machines with NVIDIA.
+    """
+    if requested not in ("auto", "cuda", "cpu"):
+        raise ValueError("ocr device must be 'auto', 'cuda' or 'cpu'")
+    if requested == "cpu":
+        return "cpu"
+    if providers is None:
+        try:
+            providers = importlib.import_module("onnxruntime").get_available_providers()
+        except ImportError:
+            providers = []
+    if gpu_ready is None:
+        from .system_components import gpu_ocr_ready as gpu_ready
+    usable = "CUDAExecutionProvider" in providers and gpu_ready()
+    if requested == "cuda" and not usable:
+        raise MediaError("GPU OCR was requested, but the GPU OCR package or a ready NVIDIA driver is missing; "
+                         "run setup-gpu-ocr or use the CPU")
+    return "cuda" if usable else "cpu"
+
+
+def _ocr_engine(device: str = "cpu"):
     """All three ONNX models must already be in the installed package."""
     module = importlib.import_module("rapidocr_onnxruntime")
     model_dir = Path(module.__file__).resolve().parent / "models"
@@ -289,13 +313,21 @@ def _ocr_engine():
             raise MediaError(f"Expected one bundled {role} ONNX model in {model_dir}; "
                              "automatic model download is disabled")
         paths[f"{role}_model_path"] = str(candidates[0])
-        paths[f"{role}_use_cuda"] = False
+        paths[f"{role}_use_cuda"] = device == "cuda"
         paths[f"{role}_use_dml"] = False
+    if device == "cuda":
+        ort = importlib.import_module("onnxruntime")
+        # Errors only: the CUDA build warns about plugin EP lookups that do not affect the result.
+        ort.set_default_logger_severity(3)
+        # The CUDA build finds its CUDA and cuDNN DLLs in the project's nvidia packages.
+        if hasattr(ort, "preload_dlls"):
+            ort.preload_dlls()
     engine = module.RapidOCR(**paths)
     sessions = (engine.text_det.infer.session, engine.text_cls.infer.session,
                 engine.text_rec.session.session)
-    if any(session.get_providers() != ["CPUExecutionProvider"] for session in sessions):
-        raise MediaError("RapidOCR CPU-only execution providers could not be verified")
+    expected = "CUDAExecutionProvider" if device == "cuda" else "CPUExecutionProvider"
+    if any(session.get_providers()[0] != expected for session in sessions):
+        raise MediaError(f"RapidOCR could not verify the {device} execution provider")
     return engine, paths
 
 
@@ -318,7 +350,7 @@ def _ocr_frame(engine, path: Path) -> list[dict]:
 
 def extract_visuals(ffmpeg: Path, source: Path, out_dir: Path,
                     interval: float = 10.0, dedup_threshold: int = 5,
-                    *, start: float = 0.0, end: float | None = None) -> dict:
+                    *, start: float = 0.0, end: float | None = None, ocr_device: str = "cpu") -> dict:
     ffmpeg, source = _file(ffmpeg), _file(source)
     interval = _number(interval, "sample interval")
     if interval <= 0 or not isinstance(dedup_threshold, int) or not 0 <= dedup_threshold <= 64:
@@ -355,7 +387,16 @@ def extract_visuals(ffmpeg: Path, source: Path, out_dir: Path,
             or any(time < 0 for time in times)
             or any(current < previous for previous, current in zip(times, times[1:]))):
         raise MediaError("Selected frame PTS records are out of order or invalid")
-    engine, ocr_config = _ocr_engine()
+    device = choose_ocr_device(ocr_device)
+    gpu_failure = None
+    try:
+        engine, ocr_config = _ocr_engine(device)
+    except Exception as exc:
+        # A GPU that looks ready can still fail to start; only an explicit request stays strict.
+        if device != "cuda" or ocr_device == "cuda":
+            raise
+        gpu_failure, device = str(exc)[-500:], "cpu"
+        engine, ocr_config = _ocr_engine("cpu")
     frames, representatives, exact_pixels = [], [], {}
     for index, (path, timestamp) in enumerate(zip(images, times), 1):
         fingerprint = _dhash(path)
@@ -403,8 +444,10 @@ def extract_visuals(ffmpeg: Path, source: Path, out_dir: Path,
                                 "Interval selection uses the next available frame; timestamp gaps can exceed the requested interval by a frame or due to source gaps.",
                                 "Exact-pixel duplicates reuse OCR with their original source frame and time; they are not independent OCR observations.",
                                 "OCR captures visible text, not the meaning of diagrams or motion."]}
-    data = {"engine": "rapidocr_onnxruntime", "device": "cpu", "model_paths": {
+    data = {"engine": "rapidocr_onnxruntime", "device": device, "model_paths": {
         k: v for k, v in ocr_config.items() if k.endswith("_model_path")},
             "frames": frames, "coverage": coverage}
+    if gpu_failure:
+        data["gpu_failure"] = gpu_failure
     (out_dir / "visuals.json").write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return data

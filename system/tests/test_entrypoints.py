@@ -121,5 +121,51 @@ class DownloadTests(unittest.TestCase):
                 fetch_assets.download("https://example.invalid/asset", Path(folder) / "asset.partial")
 
 
+class GpuOcrChoiceTests(unittest.TestCase):
+    def setUp(self):
+        self.folder = tempfile.TemporaryDirectory()
+        choice = patch.object(setup, "GPU_OCR_CHOICE", Path(self.folder.name) / "gpu-ocr.json")
+        choice.start()
+        self.addCleanup(choice.stop)
+        self.addCleanup(self.folder.cleanup)
+        self.lines = []
+        self.session = type("Session", (), {"say": lambda _, text: self.lines.append(text)})()
+
+    def test_unattended_setup_only_mentions_the_option(self):
+        setup.offer_gpu_ocr(self.session, ready=lambda: True, interactive=False)
+        self.assertEqual(len(self.lines), 1)
+        self.assertIn("setup-gpu-ocr", self.lines[0])
+        self.assertIsNone(setup.gpu_ocr_choice())
+        self.assertEqual(setup.transcribe_lock(), "requirements.lock.txt")
+
+    def test_an_empty_answer_is_no_and_is_not_asked_again(self):
+        with patch.object(setup, "setup_gpu_ocr") as install:
+            setup.offer_gpu_ocr(self.session, ready=lambda: True, interactive=True, ask=lambda _: "")
+            install.assert_not_called()
+            self.assertIs(setup.gpu_ocr_choice(), False)
+            self.lines.clear()
+            setup.offer_gpu_ocr(self.session, ready=lambda: True, interactive=True, ask=lambda _: "y")
+            install.assert_not_called()
+        self.assertEqual(self.lines, [])
+
+    def test_yes_installs_and_later_setups_keep_the_gpu_lock(self):
+        with patch.object(setup, "setup_gpu_ocr", side_effect=lambda session: setup.record_gpu_ocr_choice(True)) as install:
+            setup.offer_gpu_ocr(self.session, ready=lambda: True, interactive=True, ask=lambda _: "Y")
+        install.assert_called_once()
+        self.assertEqual(setup.transcribe_lock(), setup.GPU_OCR_LOCK)
+
+    def test_machines_without_nvidia_are_not_asked(self):
+        setup.offer_gpu_ocr(self.session, ready=lambda: False, interactive=True, ask=lambda _: self.fail("asked"))
+        self.assertEqual(self.lines, [])
+
+    def test_the_gpu_lock_differs_from_the_cpu_lock_only_in_onnx_runtime(self):
+        def pins(name):
+            text = (ROOT / "system/config" / name).read_text(encoding="utf-8")
+            return {line.split(" ")[0] for line in text.splitlines() if line[:1].isalpha()}
+        cpu, gpu = pins("requirements.lock.txt"), pins(setup.GPU_OCR_LOCK)
+        self.assertEqual({p for p in cpu - gpu}, {p for p in cpu if p.startswith("onnxruntime==")})
+        self.assertTrue(all(p.startswith(("onnxruntime-gpu==", "nvidia-")) for p in gpu - cpu))
+
+
 if __name__ == "__main__":
     unittest.main()

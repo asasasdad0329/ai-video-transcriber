@@ -60,7 +60,7 @@ class WorkflowContractTests(unittest.TestCase):
                              {"id": "s000002", "start": 305.0, "end": 310.0,
                               "text": "第二章有 3 個選項。", "tokens": []}]}
 
-    def visuals(self, ffmpeg, source, out, *args):
+    def visuals(self, ffmpeg, source, out, *args, ocr_device="cpu"):
         self.calls["visuals"] += 1
         out.mkdir(parents=True, exist_ok=True)
         frames = []
@@ -109,6 +109,23 @@ class WorkflowContractTests(unittest.TestCase):
     def test_status_shows_the_device_speech_recognition_ran_on(self):
         self.run_process()
         self.assertEqual(cli.compact.status_view(cli._read(self.run / "state.json"))["asr_device"], "cpu")
+
+    def test_process_announces_its_estimate_and_each_stage_on_stderr(self):
+        import contextlib
+        import io
+        lines = io.StringIO()
+        with contextlib.redirect_stderr(lines):
+            self.run_process()
+        text = lines.getvalue().splitlines()
+        self.assertEqual(len(text), 3)
+        self.assertIn("影片 5 分鐘", text[0])
+        self.assertIn("依預設值", text[0])
+        self.assertIn("最長單次等待", text[0])
+        self.assertTrue(text[1].startswith("語音辨識完成"))
+        self.assertTrue(text[2].startswith("抽圖與 OCR 完成"))
+        with contextlib.redirect_stderr(io.StringIO()) as again:
+            cli.process("source.mp4")
+        self.assertEqual(again.getvalue(), "")
 
     def test_visual_omission_requires_review_and_separate_basis(self):
         self.run_process()

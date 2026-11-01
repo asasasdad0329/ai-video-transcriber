@@ -27,6 +27,10 @@
 
 新電腦第一次執行任何命令時，`run.ps1` 會先把專案專用的 uv 與 Python 裝進 `.runtime`（約 50 MB），之後 `catalog` 即可使用。`.runtime/envs/transcribe` 不存在時，告訴使用者要執行 `./run.ps1 setup`（約 1.5 GB 下載，全部裝在專案內）後直接執行，不必等回覆；要做資料卡或講義而 `.runtime/envs/publish` 不存在時，同樣處理 `./run.ps1 setup-publish`。setup 中斷或失敗時，排除原因後重跑同一個命令即可接續，已完成的部分不會重做。setup 完成後，以及 setup 或 doctor 失敗時，執行 `./run.ps1 doctor` 並逐項讀 `system` 欄位。
 
+`doctor` 的 `gpu_ocr.offer` 為 true 時，告訴使用者可選裝 GPU 版畫面 OCR（約 1.9 GB，OCR 約快 2 倍，辨識結果相同），預設不裝。使用者要裝才執行 `./run.ps1 setup-gpu-ocr`；不要時執行 `./run.ps1 setup-gpu-ocr --remove` 記下選擇，之後不再詢問。兩者都只改專案內的 `.runtime`。
+
+`process`、`resume` 與各種 setup 會跑上數分鐘。轉錄新影片時先在背景啟動 `process`，等待期間再讀 skill 與規範。等待時等在該命令上，用工具允許的最長單次等待（例如 Codex 的 write_stdin／wait 每次至少 120 秒；Claude Code 以背景執行並等完成通知），不要用 `Start-Sleep` 或每幾秒查一次；命令一結束等待就會返回，不會多等。`process` 開頭印出依本機紀錄估計的時間，每完成一個階段再印一行。
+
 `system` 列出無法裝進專案的系統元件。缺少時告訴使用者元件、用途、必要性，以及 README.md「系統元件與安裝指引」的安裝方式。使用者要 Agent 代為安裝時，只能用該指引列出的指令，並先依下節取得同意，動作寫「安裝」，註明是否需要系統管理員權限或重新開機。指引沒有列出的安裝方式、其他系統設定與專案外既有環境一律不動。
 
 ## 變更需經明確同意

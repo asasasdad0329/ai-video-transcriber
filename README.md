@@ -39,7 +39,7 @@
 
 | 階段 | 結果 |
 | --- | --- |
-| 本機處理 | 語音辨識 13 秒（GPU：RTX 3070 8 GB）；抽出 180 張畫面，OCR 約 2 分 15 秒（CPU） |
+| 本機處理 | 語音辨識 13 秒（GPU：RTX 3070 8 GB）；抽出 180 張畫面，抽圖與 OCR 約 2 分 15 秒（CPU），選裝 GPU 版 OCR 後約 48 秒 |
 | 逐字稿 | 40 個小節、39 張畫面卡；3 處聽不清的字標成〔？〕 |
 | 資料卡 | 7 節，含目錄、每節代表原句、關鍵字與待核對清單 |
 | 講義 | 8 章、13 頁 DOCX，含 10 張畫面截圖與 1 張 Mermaid 流程圖 |
@@ -172,7 +172,10 @@ flowchart LR
 .\run.ps1 setup-publish   # 資料卡與講義環境：python-docx、Playwright、Mermaid
 .\run.ps1 doctor          # 檢查轉錄環境與系統元件
 .\run.ps1 publish-doctor  # 檢查資料卡與講義環境
+.\run.ps1 setup-gpu-ocr   # 選裝：NVIDIA 顯示卡用的 GPU 版畫面 OCR（約 1.9 GB）
 ```
+
+偵測到支援 CUDA 13 的 NVIDIA 驅動時，setup 會詢問要不要加裝 GPU 版畫面 OCR，預設不裝。裝了以後抽圖與 OCR 約快 2 倍，辨識結果和 CPU 版相同；顯示卡無法使用時自動改回 CPU。`.\run.ps1 setup-gpu-ocr --remove` 可改回 CPU 版。
 
 第一次執行任何命令時，`run.ps1` 會先把專案專用的 uv 與 Python 裝進 `.runtime/`（約 50 MB）。PowerShell 若顯示「已停用指令碼執行」，或你用的是 cmd、Git Bash，把 `.\run.ps1` 換成 `.\run.cmd`，參數相同。
 
@@ -187,7 +190,7 @@ flowchart LR
 | 元件 | 用途 | 必要性 | 安裝方式 |
 | --- | --- | --- | --- |
 | Microsoft Visual C++ 2015–2022 可轉散發套件（x64） | whisper.cpp 執行需要 | 必要 | `winget install --id Microsoft.VCRedist.2015+.x64 -e`，或從 [Microsoft 官方](https://aka.ms/vs/17/release/vc_redist.x64.exe)下載執行。需要系統管理員權限。 |
-| NVIDIA 顯示卡驅動（支援 CUDA 11.8 以上） | GPU 語音辨識 | 建議；沒有時自動改用 CPU | 沒有 winget 套件。從 [NVIDIA 驅動下載](https://www.nvidia.com/Download/index.aspx)或 NVIDIA App 依顯示卡型號安裝。AI 助理可以用 `nvidia-smi` 或 `Get-CimInstance Win32_VideoController` 查出型號並開啟下載頁；安裝程式需要系統管理員權限，可能需要重新開機。 |
+| NVIDIA 顯示卡驅動（支援 CUDA 11.8 以上） | GPU 語音辨識；選裝的 GPU 版畫面 OCR 需支援 CUDA 13 | 建議；沒有時自動改用 CPU | 沒有 winget 套件。從 [NVIDIA 驅動下載](https://www.nvidia.com/Download/index.aspx)或 NVIDIA App 依顯示卡型號安裝。AI 助理可以用 `nvidia-smi` 或 `Get-CimInstance Win32_VideoController` 查出型號並開啟下載頁；安裝程式需要系統管理員權限，可能需要重新開機。 |
 | Microsoft Edge 或 Google Chrome | 講義的 Mermaid 圖 | 製作講義時必要 | Windows 11 內建 Edge。缺少時：`winget install --id Microsoft.Edge -e` 或 `winget install --id Google.Chrome -e`。 |
 | Microsoft Word | 講義預覽（轉 PDF） | 選用；沒有時只略過預覽 | 需要 Microsoft 365／Office 授權，AI 助理不代為安裝。 |
 
@@ -268,6 +271,12 @@ GPU 語音辨識需要的 CUDA 執行庫（cuBLAS）由 setup 下載到專案內
 **為什麼 AI 助理會跟我要申請碼？**
 修改主稿、覆蓋或刪除成品、安裝系統元件，都可能讓你失去內容或改變電腦設定。申請碼確保你的同意只對應眼前這一份列出內容的申請，舊的「同意」不會被套用到新的動作上。
 
+**畫面 OCR 可以用 GPU 嗎？**
+可以，但要另外選裝：NVIDIA 顯示卡、驅動支援 CUDA 13，再執行 `.\run.ps1 setup-gpu-ocr`（約 1.9 GB）。抽圖與 OCR 約快 2 倍，辨識結果相同。預設不裝，因為下載量大，而且語音辨識本來就用 GPU，OCR 只占本機處理的一部分。
+
+**處理時會一直等嗎？**
+`process` 一開始會依這台電腦過去的處理紀錄估計要多久，每完成一個階段再印一行。AI 助理照規則等在命令上，不會每幾秒查一次。
+
 **語音辨識偶爾吐出半個字怎麼辦？**
 Whisper 偶爾只輸出一個字的一部分。程式會把它標成 �，列為疑點交給 AI 助理依證據改正；改不了就標〔？〕。留著 � 的稿子不會被交付。
 
@@ -327,6 +336,7 @@ AI 助理會自行執行需要的指令；以下是你可能會直接用到的�
 .\run.ps1 process <影片路徑>          # 只做本機處理（語音辨識、抽圖、OCR）
 .\run.ps1 process <影片路徑> --device cpu   # 強制用 CPU（預設自動選擇）
 .\run.ps1 doctor                     # 檢查環境與系統元件
+.\run.ps1 setup-gpu-ocr              # 選裝 GPU 版畫面 OCR；加 --remove 改回 CPU 版
 .\run.ps1 test                       # 執行測試
 ```
 
@@ -345,8 +355,10 @@ setup 從各元件的官方發布位置下載下列檔案，不包含在本 repo
 | [Whisper](https://github.com/openai/whisper) large-v3-turbo（ggml q5_0） | — | MIT |
 | [uv](https://github.com/astral-sh/uv) | 0.12.13 | MIT／Apache-2.0 |
 | [Mermaid](https://github.com/mermaid-js/mermaid) | 11.17.2 | MIT |
+| [ONNX Runtime GPU](https://onnxruntime.ai/)（選裝） | 1.31.1 | MIT |
+| NVIDIA CUDA 執行庫、cuBLAS、cuDNN 等（選裝，PyPI 的 nvidia-* 套件） | CUDA 13.4、cuDNN 9.27 | NVIDIA 軟體授權 |
 
-Python 套件版本鎖在 [requirements.lock.txt](system/config/requirements.lock.txt) 與 [publish-requirements.lock.txt](system/config/publish-requirements.lock.txt)，授權依各套件。
+Python 套件版本鎖在 [requirements.lock.txt](system/config/requirements.lock.txt)、[gpu-ocr-requirements.lock.txt](system/config/gpu-ocr-requirements.lock.txt)（選裝）與 [publish-requirements.lock.txt](system/config/publish-requirements.lock.txt)，授權依各套件。
 
 </details>
 

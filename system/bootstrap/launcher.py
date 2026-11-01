@@ -40,7 +40,7 @@ def main(argv):
         # Self-test for the shell entry points: echoes exactly the arguments that arrived.
         print(json.dumps(argv[1:], ensure_ascii=False))
         return 0
-    if command in ("setup", "setup-publish"):
+    if command in ("setup", "setup-publish", "setup-gpu-ocr"):
         import setup
         return setup.main(argv)
     # The index only needs the standard library; the transcribe venv adds OpenCC name matching.

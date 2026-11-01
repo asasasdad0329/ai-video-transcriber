@@ -45,6 +45,8 @@ Git 對 bootstrap-lock.json、requirements.lock.txt、glossary.txt 保留原始�
 
 可重用的測試程式留在 system/tests，測試在 .runtime/tmp 產生暫存。失敗試跑或過期暫存可歸檔；清理前確認它們未被有效 run 引用。原始 ASR／OCR、校字證據及原檔不作一般垃圾清除。下載與安裝快取供離線重建，預設保留。
 
+轉錄 venv 預設依 requirements.lock.txt 安裝 CPU 版 ONNX Runtime。setup-gpu-ocr 把選擇記在 .runtime/gpu-ocr.json，之後每次 setup 改依 gpu-ocr-requirements.lock.txt 同步：只把 onnxruntime 換成 onnxruntime-gpu 與 PyPI 上的 nvidia CUDA 13／cuDNN 套件，其餘版本相同（由 gpu-ocr-requirements.in 加 gpu-ocr-overrides.txt，以 -c requirements.lock.txt 編譯）。OCR 的 ocr_device 預設 auto：裝了 GPU 版且驅動支援 CUDA 13 才用 GPU，啟動失敗自動改回 CPU，實際裝置記在 visuals.json 與 state.json 的 ocr_device。process 依本機已完成 run 的各階段耗時（每分鐘影片秒數，取最近 10 次中位數，不足 3 次用預設值）估計時間，見 system/src/video_workflow/eta.py。
+
 setup 重建轉錄 venv 時，原環境備份到 .runtime/backups；不作日常環境使用。僅有 Git 不會備份私人工作資料，應另外備份工作資料及需要離線保留的安裝快取。
 
 ## 驗證

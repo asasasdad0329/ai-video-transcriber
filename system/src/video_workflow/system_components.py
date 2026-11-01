@@ -14,6 +14,8 @@ import subprocess
 GUIDE = "README.md#系統元件與安裝指引"
 VC_RUNTIME = ("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll", "vcomp140.dll")
 MIN_DRIVER_CUDA = (11, 8)
+# The optional GPU OCR build ships CUDA 13 runtime libraries.
+MIN_DRIVER_CUDA_GPU_OCR = (13, 0)
 
 
 def _system32():
@@ -54,9 +56,13 @@ def _word():
         return False
 
 
-def cuda_ready(run=subprocess.run):
+def cuda_ready(run=subprocess.run, minimum=MIN_DRIVER_CUDA):
     cuda = _driver_cuda(run)
-    return cuda is not None and cuda >= MIN_DRIVER_CUDA
+    return cuda is not None and cuda >= minimum
+
+
+def gpu_ocr_ready(run=subprocess.run):
+    return cuda_ready(run, MIN_DRIVER_CUDA_GPU_OCR)
 
 
 def check(run=subprocess.run):

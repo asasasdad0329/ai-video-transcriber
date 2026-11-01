@@ -182,6 +182,31 @@ class MediaAdapterTests(unittest.TestCase):
             media.transcribe(self.exe, model, audio, output, device="cuda")
         self.assertEqual(len(calls), 1)
 
+    def test_ocr_uses_the_gpu_only_when_the_optional_package_and_driver_are_there(self):
+        cuda = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        self.assertEqual(media.choose_ocr_device("cpu", providers=cuda, gpu_ready=lambda: True), "cpu")
+        self.assertEqual(media.choose_ocr_device("auto", providers=["CPUExecutionProvider"], gpu_ready=lambda: True), "cpu")
+        self.assertEqual(media.choose_ocr_device("auto", providers=cuda, gpu_ready=lambda: False), "cpu")
+        self.assertEqual(media.choose_ocr_device("auto", providers=cuda, gpu_ready=lambda: True), "cuda")
+        with self.assertRaises(media.MediaError):
+            media.choose_ocr_device("cuda", providers=["CPUExecutionProvider"], gpu_ready=lambda: True)
+
+    def test_ocr_falls_back_to_the_cpu_when_the_gpu_engine_fails_to_start(self):
+        output = self.root / "visuals"
+        def fake_run(*args):
+            (output / "frames" / "frame-000001.png").touch()
+            return subprocess.CompletedProcess([], 0, b"", b"[Parsed_showinfo_1 @ a] n: 0 pts: 0 pts_time:0 fmt:rgb24")
+        engines = [media.MediaError("cudnn64_9.dll not found"), (object(), {})]
+        with patch.object(media, "_run", side_effect=fake_run), \
+             patch.object(media, "choose_ocr_device", return_value="cuda"), \
+             patch.object(media, "_ocr_engine", side_effect=engines) as engine, \
+             patch.object(media, "_dhash", return_value=0), patch.object(media, "_pixel_hash", return_value="p"), \
+             patch.object(media, "_ocr_frame", return_value=[]):
+            result = media.extract_visuals(self.exe, self.source, output, ocr_device="auto")
+        self.assertEqual([call.args for call in engine.call_args_list], [("cuda",), ("cpu",)])
+        self.assertEqual(result["device"], "cpu")
+        self.assertIn("cudnn64_9.dll", result["gpu_failure"])
+
     def test_exact_pixel_duplicates_keep_timeline_and_ocr_source(self):
         output = self.root / "visuals"
         def fake_run(*args):
