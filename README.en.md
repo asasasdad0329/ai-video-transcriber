@@ -22,7 +22,7 @@ AI agents: start with [AGENTS.md](AGENTS.md). The project rules, skills and docs
 
 - **Transcript** — every spoken word, not summarized or rewritten, with on-screen text, tables and diagrams inserted where they appear. The result is a single self-contained Traditional Chinese Markdown file.
 - **Data card** — built from a finished transcript. Keeps the transcript text verbatim and adds a table of contents, representative quotes per section, terms, cases and screen structure, for AI retrieval. Several videos in a series can be combined into one series card.
-- **Handout** — built from a finished transcript. Rewritten into written style, organized into chapters in lecture order, with tables and Mermaid diagrams, exported as a DOCX designed for reading on a phone.
+- **Handout** — watching a video means going at the speaker's pace; reading is much faster. The handout condenses a video into something you can read through: built from a finished transcript, rewritten into written style, organized into chapters in lecture order, with tables and Mermaid diagrams, exported as a DOCX designed for reading on a phone.
 
 ## How it works
 
@@ -189,7 +189,7 @@ Agent: Done: the data card is in 工作資料/輸出/資料卡/ and the handout 
 
 ### Handout
 
-- **Purpose**: a DOCX for human readers, optimized for phones.
+- **Purpose**: take in the same content in far less time than watching the video. A video runs at the speaker's pace, fillers, restarts and pauses included; text lets you set your own speed and skip what you already know. So the handout puts readability first: speech becomes written style without fillers, repeats or restarts, on-screen tables and flows become tables and diagrams, only frames with content are kept, and it is laid out for phones. Every point, example, number and name the speaker gave is kept, and nothing the speaker did not say is added.
 - **Input**: a finished transcription.
 - **Output**: `工作資料/輸出/講義/<video name>.docx`.
 - **Process**: `handout prepare` writes an input package, the agent rewrites the content as a handout draft, and `handout build` checks paragraph coverage and that numbers and proper nouns are preserved before exporting the DOCX. Fonts, colors and diagram styling come from a theme; switching themes only needs another build.
