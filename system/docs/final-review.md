@@ -15,11 +15,12 @@ edits.json 範例：
 ```json
 {"edits":[
   {"segment_id":"s000006","new_text":"身强身弱理论就是典型代表","reason":"同段術語與上下文一致"},
-  {"segment_id":"s000044","decision":"needs_review","reason":"兩個解讀尚不能排除"}
+  {"segment_id":"s000044","decision":"needs_review","reason":"兩個解讀尚不能排除"},
+  {"segment_id":"s000051","decision":"needs_review","new_text":"身強的人用印〔？〕比較好","reason":"身強已確定，印字仍有兩種聽法"}
 ]}
 ```
 
-更正預設 decision=correct；沒給 evidence_ids 時明示使用 text:<segment_id> 作上下文依據，沒有假稱聽音。有畫面／重辨依據時可直接附 evidence_ids。keep 與 needs_review 可省略 new_text。needs_review 保留整段辨識原文，不能同時做部分更正：同一段只能擇一，把有把握的字更正而不標〔？〕，或保留原文並標〔？〕。來源原文、版本、合法證據 ID 與長覆蓋清單由程式管理。先前未解項不會因這次未提及便自動清除。
+更正預設 decision=correct；沒給 evidence_ids 時明示使用 text:<segment_id> 作上下文依據，沒有假稱聽音。有畫面／重辨依據時可直接附 evidence_ids。keep 與 needs_review 可省略 new_text。needs_review 不給 new_text 時保留整段辨識原文，〔？〕標在段尾。只有部分字詞不確定時做部分更正：new_text 改好有把握的字，並在仍照辨識保留的字詞後面加〔？〕；這段照樣計為未解。來源原文、版本、合法證據 ID 與長覆蓋清單由程式管理。先前未解項不會因這次未提及便自動清除。
 
 第一次建立草稿時，目錄須在正式 run 外。final_review_tasks.json 以 `CODEX_SESSION_ID`／`CODEX_THREAD_ID`（沒有 session 環境變數的 host 必須用 `--task-id`）記錄這個任務所綁定的唯一草稿；host 已提供 session ID 時，`--task-id` 不得改成另一個值。同一任務再次 start-draft 只回傳原草稿。若另一個 session 使用相同輸出目錄，CLI 自動加任務雜湊後綴，因此它能從同一 run 重新開始自己的後續流程。
 
@@ -55,7 +56,9 @@ find/replace 必須唯一命中，繁／簡顯示可定位；同詞多處只回�
 }
 ```
 
-section_titles 的鍵是目前的小節名（必須唯一），同名小節用 `#N` 指第 N 個小節；同一批的改名先找齊目標再一起套用，可以互換名稱。每批變更全部有效才保存；片段修改不能偷換未知 ID 或使用不存在的證據。protected_terms、標點、分段與文字都在 staging 草稿累積，不為任何小修另建 planning 或工具鏈。多次局部編輯最後合併成同一原文至最終文字的單筆 Patch 項，不建立中間正式版本。`edit-draft` 只供封存前使用；封存後會拒絕逐項修補。
+section_titles 的鍵是目前的小節名（必須唯一），同名小節用 `#N` 指第 N 個小節；同一批的改名先找齊目標再一起套用，可以互換名稱。值為 null 時把該小節併入前一節：標題拿掉，內容留在原處；要把被小節標題隔開的段落接起來，先併節再 join_before。
+
+圖卡不會切斷句子。講者常在句子講到一半時換投影片；每次建立草稿與每批變更後，程式把落在句子中間的圖卡，連同它開頭的小節標題，移到該句結束處，被切開的段落也接回同一段，移動結果列在變更紀錄的 `moved_after_sentence_end`。所以只要把句讀標對，圖卡位置會自己跟上，不要為了放圖卡而加句號。每批變更全部有效才保存；片段修改不能偷換未知 ID 或使用不存在的證據。protected_terms、標點、分段與文字都在 staging 草稿累積，不為任何小修另建 planning 或工具鏈。多次局部編輯最後合併成同一原文至最終文字的單筆 Patch 項，不建立中間正式版本。`edit-draft` 只供封存前使用；封存後會拒絕逐項修補。
 
 ## 封存最終候選
 
@@ -104,7 +107,7 @@ final-changes.json 同時保存全文閱讀找到的問題與處理方式；沒�
 .\run.ps1 finish-review "<draft_dir>" --reviewed --revision 3 --changes "<final-changes.json>"
 ```
 
-revision 使用 read-draft 回傳的封存 revision；--reviewed 是代理對「本任務確實讀過該封存候選全文，或正沿用已有閱讀 checkpoint」的明確聲明，不是使用者追加批准，也不是工具自動推定已閱讀。`review_issues` 每項必須記錄種類、摘要、處理方式與受影響的 segment／card ID；可為空清單。其餘 edits、punctuation、split_before、join_before、card_before、section_titles 與 protected_terms 是唯一一批讀後修正；card_before 把指定圖卡移到目標 segment 之前，值為 null 時移到全文末尾。
+revision 使用 read-draft 回傳的封存 revision；--reviewed 是代理對「本任務確實讀過該封存候選全文，或正沿用已有閱讀 checkpoint」的明確聲明，不是使用者追加批准，也不是工具自動推定已閱讀。`review_issues` 每項必須記錄種類、摘要、處理方式與受影響的 segment／card ID；可為空清單。其餘 edits、punctuation、split_before、join_before、card_before、section_titles 與 protected_terms 是唯一一批讀後修正；card_before 把指定圖卡移到目標 segment 之前，值為 null 時移到全文末尾；圖卡若是小節的第一塊，小節標題跟著移動，中間的段落改歸前一節。
 
 `kind` 只接受下列六種；其他值（例如 asr、format、unresolved）會讓整批被拒絕：
 

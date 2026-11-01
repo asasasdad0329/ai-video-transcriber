@@ -16,6 +16,18 @@ from workspace_paths import ROOT, resolve
 
 FINISHED = {"completed", "completed_with_unresolved"}
 _VISUAL_HEAD = re.compile(r"^> \*\*畫面補充：(.*)\*\*$")
+_SCREEN_NOTE = "畫面註："
+
+
+def screen_notes(text):
+    """Split a card's 畫面註 (what could not be read) from what the screen shows."""
+    shown, notes = [], []
+    for paragraph in text.split("\n\n"):
+        if paragraph.startswith(_SCREEN_NOTE):
+            notes.append(paragraph.removeprefix(_SCREEN_NOTE).strip())
+        else:
+            shown.append(paragraph)
+    return "\n\n".join(shown), notes
 
 
 def clock(seconds):
@@ -135,7 +147,8 @@ def load_run(value, *, allow_edited_primary=True):
                 card = cards[bid]
                 frames = [{"frame_id": f.get("frame_id"), "time": f.get("time"), "path": rel(resolve(f["path"]))}
                           for f in card.get("frame_times", []) if f.get("path")]
-                block = {"kind": "visual", "text": chunk["text"], "title": chunk["title"], "card_kind": card.get("kind"),
+                text, notes = screen_notes(chunk["text"])
+                block = {"kind": "visual", "text": text, "notes": notes, "title": chunk["title"], "card_kind": card.get("kind"),
                          "start": card.get("start", 0.0), "end": card.get("end", card.get("start", 0.0)), "frames": frames}
             block.update(id=bid, section=sid)
             blocks[bid] = block

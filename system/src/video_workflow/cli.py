@@ -240,15 +240,21 @@ def _rechecks(run):
 
 
 def _review_counts(run, state):
+    from .reading import UNRESOLVED
+
+    def open_(decision):
+        # A partial fix is a correction that still carries 〔？〕 after the uncertain words.
+        return decision["decision"] == "needs_review" or UNRESOLVED in decision.get("new_text", "")
+
     suspects = [item["segment_id"] for item in _read(run / "triage.json")["suspects"]]
     decisions = _record(run).get("decisions", {})
     suspects += [decision["segment_id"] for decision in decisions.values()
-                 if decision["decision"] == "needs_review" and decision["segment_id"] not in suspects]
-    unresolved = [sid for sid in suspects if decisions.get(str(sid), {}).get("decision") not in ("keep", "correct")]
+                 if open_(decision) and decision["segment_id"] not in suspects]
+    unresolved = [sid for sid in suspects if str(sid) not in decisions or open_(decisions[str(sid)])]
     state["review"] = {"suspect_count": len(suspects), "resolved_count": len(suspects) - len(unresolved),
                        "unresolved_ids": unresolved,
                        "pending_count": sum(str(sid) not in decisions for sid in suspects),
-                       "needs_review_count": sum(decisions.get(str(sid), {}).get("decision") == "needs_review" for sid in suspects)}
+                       "needs_review_count": sum(str(sid) in decisions and open_(decisions[str(sid)]) for sid in suspects)}
     return unresolved
 
 

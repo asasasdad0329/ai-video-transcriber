@@ -13,6 +13,24 @@ TAIWAN_TERMS = ROOT / "system/config/taiwan_terms.txt"
 _PUNCTUATION = set("，。？！；：、…—,.!?;:")
 # New runs title the reading edition after the video; older layouts kept this phrase.
 DEFAULT_TITLE = "逐字稿與畫面"
+UNRESOLVED = "〔？〕"
+_SENTENCE_END = ("。", "？", "！", ".", "?", "!")
+_CLOSING = "\"'」』）】》”’"
+
+
+def closes_sentence(text):
+    """Whether rendered speech ends a sentence, looking past a 〔？〕 and closing quotes."""
+    return text.rstrip().removesuffix(UNRESOLVED).rstrip(_CLOSING).endswith(_SENTENCE_END)
+
+
+def speech_piece(text, decision, ending, convert):
+    """One segment as the reading edition shows it, before it is joined to the next."""
+    text = convert(text).strip()
+    if decision == "needs_review":
+        text += UNRESOLVED
+    if ending and not text.endswith(tuple(_PUNCTUATION)):
+        text += ending
+    return text
 
 
 @lru_cache(maxsize=None)
@@ -262,10 +280,14 @@ def card_text(card, block, protected_terms=()):
 
 
 def default_layout(segments, cards, title=DEFAULT_TITLE):
-    """Readable fallback; the agent can supply semantic paragraph boundaries."""
+    """Readable fallback; the agent can supply semantic paragraph boundaries.
+
+    A slide that appears mid-sentence opens its section once that sentence
+    ends, so neither the heading nor the card cuts the sentence in two.
+    """
     ordered = sorted(cards, key=lambda c: (c["start"], c["id"]))
     sections, block, size = [{"title": "開場", "blocks": []}], [], 0
-    index = 0
+    index, waiting = 0, []
 
     def flush():
         nonlocal block, size
@@ -275,21 +297,24 @@ def default_layout(segments, cards, title=DEFAULT_TITLE):
             sections[-1]["blocks"].append({"segment_ids": [s["id"] for s in block], "punctuation": endings})
             block, size = [], 0
 
+    def open_sections():
+        for card in waiting:
+            sections.append({"title": card["title"], "blocks": [{"card_id": card["id"]}]})
+        waiting.clear()
+
     for segment in segments:
         while index < len(ordered) and ordered[index]["start"] <= segment["start"]:
-            flush()
-            card = ordered[index]
-            sections.append({"title": card["title"], "blocks": [{"card_id": card["id"]}]})
+            waiting.append(ordered[index])
             index += 1
+        if not block:
+            open_sections()
         block.append(segment)
         size += len(segment["text"])
-        if size >= 140 or segment["text"].endswith(("。", "？", "！", ".", "?", "!")):
+        if size >= 140 or segment["text"].rstrip().endswith(_SENTENCE_END):
             flush()
     flush()
-    while index < len(ordered):
-        card = ordered[index]
-        sections.append({"title": card["title"], "blocks": [{"card_id": card["id"]}]})
-        index += 1
+    waiting += ordered[index:]
+    open_sections()
     return {"title": title, "sections": [s for s in sections if s["blocks"]]}
 
 
@@ -302,8 +327,7 @@ def render(transcript, cards, decisions, layout=None):
         raise ValueError("reading_layout.protected_terms must be nonempty strings")
     convert = lambda text: traditional(text, protected_terms)
     speech_ids, visual_ids, records = [], [], []
-    lines = ["# " + convert(layout["title"]), "",
-             "正文保留口述內容；辨識錯字依上下文與畫面校正。〔？〕表示尚待核對的辨識；畫面補充另列。", ""]
+    lines = ["# " + convert(layout["title"]), ""]
     for section in layout["sections"]:
         lines += ["## " + convert(section["title"]), ""]
         for block in section["blocks"]:
@@ -330,12 +354,8 @@ def render(transcript, cards, decisions, layout=None):
                 speech_ids.extend(ids)
                 pieces = []
                 for sid in ids:
-                    text = convert(by_id[sid]["text"]).strip()
-                    if decisions.get(sid, {}).get("decision") == "needs_review":
-                        text += "〔？〕"
-                    ending = punctuation.get(sid, "")
-                    if ending and not text.endswith(tuple(_PUNCTUATION)):
-                        text += ending
+                    text = speech_piece(by_id[sid]["text"], decisions.get(sid, {}).get("decision"),
+                                        punctuation.get(sid, ""), convert)
                     if pieces:
                         pieces[-1], text = _widen_join(pieces[-1], text)
                     # Preserve word separation for mixed-language speech.

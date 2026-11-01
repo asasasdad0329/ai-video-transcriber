@@ -235,6 +235,17 @@ class DataCardTests(unittest.TestCase):
         self.assertNotIn("**", output)
         self.assertNotIn("made_by", output)
 
+    def test_screen_note_moves_from_the_card_text_to_front_matter(self):
+        shown, notes = source.screen_notes("原局  \n舉例\n\n畫面註：右上角小字被遮住")
+        self.assertEqual((shown, notes), ("原局  \n舉例", ["右上角小字被遮住"]))
+        doc, plan = make_doc(), make_plan()
+        doc["blocks"]["screen-001"]["notes"] = notes
+        errors, _, resolved = card.validate(doc, plan)
+        self.assertEqual(errors, [])
+        output = card.assemble(doc, plan, resolved)
+        self.assertNotIn("畫面註", output)
+        self.assertIn("畫面: 原局\n  疑點: 右上角小字被遮住", output)
+
     def test_made_by_is_front_matter_only(self):
         doc, plan = make_doc(), make_plan()
         plan["made_by"] = "Claude Opus 5.5"

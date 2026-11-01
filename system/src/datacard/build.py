@@ -194,6 +194,9 @@ def assemble(doc, plan, resolved):
         for bid in section["blocks"]:
             for clause in unresolved_clauses(blocks[bid]["text"]):
                 unresolved.append({"節": section["id"], "原文": clause})
+            # What the screen showed but could not be read stays data, not a note in the text.
+            for note in blocks[bid].get("notes", []):
+                unresolved.append({"節": section["id"], "畫面": blocks[bid]["title"], "疑點": note})
     differences = []
     for item in _as_list(plan.get("differences")):
         where = next((s["id"] for s in resolved for b in s["blocks"]

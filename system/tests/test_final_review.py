@@ -218,6 +218,20 @@ class FinalReviewTests(unittest.TestCase):
         self.assertEqual(result["status"], "completed_with_unresolved")
         self.assertIn("s000001", result["unresolved_ids"])
 
+    def test_partial_fix_keeps_its_mark_and_stays_unresolved(self):
+        with self.assertRaisesRegex(ValueError, "partial fix"):
+            self.start({"edits": [{"segment_id": "s000001", "decision": "needs_review", "new_text": "軟體錯字"}]})
+        self.start({"edits": [{"segment_id": "s000001", "decision": "needs_review", "new_text": "軟體〔?〕錯字"}]})
+        candidate = self.seal_and_read()
+        self.assertIn("軟體〔？〕錯字", candidate["candidate"])
+        self.assertNotIn("錯字〔？〕", candidate["candidate"])
+        result = final.finish(self.draft, True, candidate["revision"],
+                              task_id="final-review-test", changes_path=self.final_changes())
+        self.assertEqual(result["status"], "completed_with_unresolved")
+        self.assertIn("s000001", result["unresolved_ids"])
+        output = cli._root_path(result["primary_transcript"]).read_text(encoding="utf-8")
+        self.assertIn("軟體〔？〕錯字", output)
+
     def test_direct_draft_change_cannot_reuse_read_receipt(self):
         self.start()
         candidate = self.seal_and_read()
@@ -297,6 +311,65 @@ class FinalReviewTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             final.excerpt(self.draft, [])
         self.assertEqual(len(final.excerpt(self.draft, ["s000001"])["segments"]), 1)
+
+
+class LayoutTests(unittest.TestCase):
+    """Cards and sections on a small draft, without a run."""
+
+    def draft(self, texts, sections):
+        return {"base": {"segments": [{"id": f"s{n}", "text": text, "start": n, "end": n + 1}
+                                      for n, text in enumerate(texts, 1)]},
+                "prior_decisions": {}, "decisions": {},
+                "cards": [{"id": card, "title": card, "verbatim_text": card, "start": 0}
+                          for card in ("A", "B")],
+                "layout": {"title": "片名", "sections": sections}, "revision": 0, "history": []}
+
+    @staticmethod
+    def shape(draft):
+        return [(section["title"], [block.get("card_id") or block["segment_ids"] for block in section["blocks"]])
+                for section in draft["layout"]["sections"]]
+
+    def test_card_shown_mid_sentence_moves_with_its_section_to_the_sentence_end(self):
+        draft = self.draft(["接下來看這個架構", "它分成三層", "第一層是介面", "第二層是資料"], [
+            {"title": "開場", "blocks": [{"segment_ids": ["s1"], "punctuation": {"s1": "，"}}]},
+            {"title": "A", "blocks": [{"card_id": "A"},
+                                      {"segment_ids": ["s2", "s3"], "punctuation": {"s2": "，", "s3": "。"}}]},
+            {"title": "B", "blocks": [{"card_id": "B"}, {"segment_ids": ["s4"], "punctuation": {"s4": "。"}}]}])
+        moved = final._settle_cards(draft)
+        self.assertEqual(moved, [{"card_id": "A", "moved_after_sentence_end": "s3"}])
+        # The sentence the card cut is one paragraph again; the next card keeps its place.
+        self.assertEqual(self.shape(draft), [("開場", [["s1", "s2", "s3"]]), ("A", ["A"]), ("B", ["B", ["s4"]])])
+        content, _ = final._render(draft)
+        self.assertIn("接下來看這個架構，它分成三層，第一層是介面。", content)
+        self.assertEqual(final._settle_cards(draft), [])
+
+    def test_cards_sharing_a_sentence_keep_their_order(self):
+        draft = self.draft(["先看", "這張圖", "說完了"], [
+            {"title": "開場", "blocks": [{"segment_ids": ["s1"], "punctuation": {"s1": "，"}}]},
+            {"title": "A", "blocks": [{"card_id": "A"}, {"segment_ids": ["s2"], "punctuation": {"s2": "，"}}]},
+            {"title": "B", "blocks": [{"card_id": "B"}, {"segment_ids": ["s3"], "punctuation": {"s3": "。"}}]}])
+        final._settle_cards(draft)
+        self.assertEqual(self.shape(draft), [("開場", [["s1", "s2", "s3"]]), ("A", ["A"]), ("B", ["B"])])
+
+    def test_card_before_carries_the_heading_and_null_merges_a_section(self):
+        draft = self.draft(["第一句", "第二句", "第三句"], [
+            {"title": "開場", "blocks": [{"segment_ids": ["s1"], "punctuation": {"s1": "。"}}]},
+            {"title": "A", "blocks": [{"card_id": "A"}, {"segment_ids": ["s2"], "punctuation": {"s2": "。"}}]},
+            {"title": "B", "blocks": [{"card_id": "B"}, {"segment_ids": ["s3"], "punctuation": {"s3": "。"}}]}])
+        final._edit_data(draft, {"card_before": {"A": "s3"}}, set())
+        self.assertEqual(self.shape(draft), [("開場", [["s1"], ["s2"]]), ("A", ["A"]), ("B", ["B", ["s3"]])])
+        final._edit_data(draft, {"section_titles": {"#3": None}}, set())
+        self.assertEqual(self.shape(draft), [("開場", [["s1"], ["s2"]]), ("A", ["A", "B", ["s3"]])])
+        with self.assertRaisesRegex(ValueError, "first section"):
+            final._edit_data(draft, {"section_titles": {"#1": None}}, set())
+
+    def test_default_layout_opens_a_slide_section_after_the_sentence(self):
+        segments = [{"id": "s1", "text": "我們接下來看", "start": 0}, {"id": "s2", "text": "這個架構。", "start": 2},
+                    {"id": "s3", "text": "它分成三層。", "start": 4}]
+        layout = reading.default_layout(segments, [{"id": "A", "title": "架構", "start": 1}])
+        self.assertEqual([(s["title"], [b.get("card_id") or b["segment_ids"] for b in s["blocks"]])
+                          for s in layout["sections"]],
+                         [("開場", [["s1", "s2"]]), ("架構", ["A", ["s3"]])])
 
 
 if __name__ == "__main__":

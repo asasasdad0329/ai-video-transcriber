@@ -174,7 +174,6 @@ def _domain_terms(draft, requested):
 def _layout_boundary_errors(blocks):
     """A visual card between unfinished speech blocks is a late layout defect."""
     errors = []
-    closing = "\"'」』）】》”’"
     for index, block in enumerate(blocks):
         if block.get("kind") != "visual":
             continue
@@ -182,12 +181,123 @@ def _layout_boundary_errors(blocks):
         following = next((item for item in blocks[index + 1:] if item.get("kind") == "speech"), None)
         if not previous or not following:
             continue
-        ending = previous.get("text", "").rstrip().removesuffix("〔？〕").rstrip(closing)
-        if not ending.endswith(("。", "？", "！", ".", "?", "!")):
+        if not reading.closes_sentence(previous.get("text", "")):
             errors.append({"card_id": block.get("card_id"),
                            "previous_segment_id": previous["segment_ids"][-1],
                            "next_segment_id": following["segment_ids"][0]})
     return errors
+
+
+# The layout is edited as one flat sequence of section headings and blocks, so a
+# card that opens a section carries its heading wherever it goes, and the
+# blocks in between change sections instead of being cut off.
+def _flatten(layout):
+    items = []
+    for section in layout["sections"]:
+        items.append({"heading": {key: value for key, value in section.items() if key != "blocks"}})
+        items.extend(section["blocks"])
+    return items
+
+
+def _regroup(layout, items):
+    sections = []
+    for item in items:
+        if "heading" in item:
+            sections.append({**item["heading"], "blocks": []})
+        else:
+            if not sections:
+                sections.append({"title": "開場", "blocks": []})
+            sections[-1]["blocks"].append(item)
+    layout["sections"] = [section for section in sections if section["blocks"]]
+
+
+def _split_at(items, segment_id, offset):
+    """Index in items just before segment_id (offset 0) or just after it (offset 1)."""
+    index = next((n for n, item in enumerate(items) if segment_id in item.get("segment_ids", [])), None)
+    if index is None:
+        raise ValueError("card_before target is not present in the current layout")
+    block = items[index]
+    position = block["segment_ids"].index(segment_id) + offset
+    if position == 0:
+        return index
+    if position == len(block["segment_ids"]):
+        return index + 1
+    punctuation = block.get("punctuation", {})
+    parts = block["segment_ids"][:position], block["segment_ids"][position:]
+    items[index:index + 1] = [{"segment_ids": part, "punctuation": {k: v for k, v in punctuation.items() if k in part}}
+                              for part in parts]
+    return index + 1
+
+
+def _move_card(layout, card_id, before=None, after=None, ends=None):
+    """Move a card, with the section it opens, before or after a segment (neither: to the end).
+
+    Given the sentence ends, speech the card used to cut mid-sentence becomes
+    one paragraph again.
+    """
+    items = _flatten(layout)
+    positions = [index for index, item in enumerate(items) if item.get("card_id") == card_id]
+    if len(positions) != 1:
+        raise ValueError("card placement must match exactly one visual block")
+    end = positions[0] + 1
+    start = end - 2 if end > 1 and "heading" in items[end - 2] else end - 1
+    unit = items[start:end]
+    del items[start:end]
+    if (ends is not None and 0 < start < len(items) and "segment_ids" in items[start - 1]
+            and "segment_ids" in items[start] and items[start - 1]["segment_ids"][-1] not in ends):
+        left, right = items[start - 1], items.pop(start)
+        left["segment_ids"] = left["segment_ids"] + right["segment_ids"]
+        left["punctuation"] = {**left.get("punctuation", {}), **right.get("punctuation", {})}
+    if after is not None:
+        index = _split_at(items, after, 1)
+    elif before is not None:
+        index = _split_at(items, before, 0)
+        # Right after the speech before the target, ahead of any heading or card
+        # that opens the target's section.
+        while index and "segment_ids" not in items[index - 1]:
+            index -= 1
+    else:
+        index = len(items)
+    items[index:index] = unit
+    _regroup(layout, items)
+
+
+def _sentence_ends(draft):
+    """IDs of the segments whose text, as rendered, closes a sentence."""
+    transcript, decisions = _working(draft)
+    terms = draft["layout"].get("protected_terms", [])
+    convert = lambda text: reading.traditional(text, terms)
+    endings = {sid: ending for section in draft["layout"]["sections"] for block in section["blocks"]
+               for sid, ending in block.get("punctuation", {}).items()}
+    return {segment["id"] for segment in transcript["segments"]
+            if reading.closes_sentence(reading.speech_piece(
+                segment["text"], decisions.get(segment["id"], {}).get("decision"),
+                endings.get(segment["id"], ""), convert))}
+
+
+def _settle_cards(draft):
+    """Move each card shown mid-sentence, with its section, to where that sentence ends.
+
+    The slide often changes while the speaker is still talking; the reading
+    edition finishes the sentence first. A sentence with no end after the card
+    is left for seal-draft to report.
+    """
+    ends = _sentence_ends(draft)
+    items = _flatten(draft["layout"])
+    moves, last = [], None
+    for index, item in enumerate(items):
+        if "segment_ids" in item:
+            last = item["segment_ids"][-1]
+        elif "card_id" in item and last is not None and last not in ends:
+            following = [sid for later in items[index + 1:] for sid in later.get("segment_ids", [])]
+            end = next((sid for sid in following if sid in ends), None)
+            if end:
+                moves.append({"card_id": item["card_id"], "moved_after_sentence_end": end})
+    # Each card lands right after its sentence's end; moving the later cards
+    # first keeps cards that share an end in their original order.
+    for move in reversed(moves):
+        _move_card(draft["layout"], move["card_id"], after=move["moved_after_sentence_end"], ends=ends)
+    return moves
 
 
 def _normalization_receipt(draft):
@@ -442,6 +552,8 @@ def start(run_dir, output_dir, changes_path=None, layout_path=None, *,
                   "suspect_ids": [s["segment_id"] for s in api._read(run / "triage.json")["suspects"]]}
         if changes_path:
             _edit_data(draft, api._read(api._root_path(changes_path)), bundle["evidence_ids"])
+        else:
+            _settle_cards(draft)
         _render(draft)
         if not replace_unread:
             directory.mkdir(parents=True, exist_ok=False)
@@ -493,10 +605,20 @@ def _edit_data(draft, data, allowed):
         new = item.get("new_text", current[sid])
         if not isinstance(new, str) or not new.strip():
             raise ValueError("replacement must be nonempty; resolve cross-segment repeats explicitly")
-        if decision != "correct" and new != current[sid]:
-            raise ValueError("keep/needs_review cannot change text")
-        if decision == "needs_review" and new != original[sid]:
-            raise ValueError("uncertain text cannot be staged as a confirmed correction")
+        new = new.replace("〔?〕", reading.UNRESOLVED)
+        # A partial fix corrects the certain words and marks the rest in place:
+        # 〔？〕 right after the words that stay as heard. It is a correction whose
+        # text still carries the mark, and the segment stays unresolved.
+        partial = decision == "needs_review" and new != original[sid]
+        if partial and reading.UNRESOLVED not in new:
+            raise ValueError("needs_review with new_text is a partial fix: put 〔？〕 right after the words "
+                             "that stay uncertain, or omit new_text to keep the whole segment as heard: " + sid)
+        if decision == "keep" and new != current[sid]:
+            raise ValueError("keep cannot change text")
+        if decision == "needs_review" and not partial and new != current[sid]:
+            raise ValueError("needs_review without a 〔？〕 cannot change text")
+        if partial:
+            decision = "correct"
         reason = item.get("reason", "依候選稿局部上下文校正；未聲稱聽音。")
         refs = item.get("evidence_ids", ["text:" + sid])
         if not isinstance(reason, str) or not reason.strip():
@@ -544,7 +666,9 @@ def _edit_data(draft, data, allowed):
                         blocks[i:i+1] = [{"segment_ids": part, "punctuation": {k: v for k, v in block.get("punctuation", {}).items() if k in part}} for part in (left, right)]
                     elif operation == "join_before":
                         if n or i == 0 or "segment_ids" not in blocks[i-1]:
-                            raise ValueError("join must target a paragraph start after speech in the same section")
+                            raise ValueError("join must target a paragraph start after speech in the same section; "
+                                             "to join across a section heading, merge the section first with "
+                                             "section_titles {\"#N\": null}")
                         blocks[i-1]["segment_ids"].extend(block["segment_ids"])
                         blocks[i-1].setdefault("punctuation", {}).update(block.get("punctuation", {}))
                         del blocks[i]
@@ -577,46 +701,7 @@ def _edit_data(draft, data, allowed):
                    for target in placements.values())):
         raise ValueError("card_before must map known card IDs to a following segment ID or null")
     for card_id, target in placements.items():
-        matches = []
-        for section in draft["layout"]["sections"]:
-            for index, block in enumerate(section["blocks"]):
-                if block.get("card_id") == card_id:
-                    matches.append((section, index, block))
-        if len(matches) != 1:
-            raise ValueError("card placement must match exactly one visual block")
-        source_section, source_index, card_block = matches[0]
-        del source_section["blocks"][source_index]
-        draft["layout"]["sections"] = [section for section in draft["layout"]["sections"]
-                                         if section["blocks"]]
-        if target is None:
-            draft["layout"]["sections"][-1]["blocks"].append(card_block)
-        else:
-            inserted = False
-            for section in draft["layout"]["sections"]:
-                for index, block in enumerate(section["blocks"]):
-                    ids = block.get("segment_ids", [])
-                    if target not in ids:
-                        continue
-                    position = ids.index(target)
-                    if position:
-                        left, right = ids[:position], ids[position:]
-                        punctuation = block.get("punctuation", {})
-                        replacement = [
-                            {"segment_ids": left,
-                             "punctuation": {key: value for key, value in punctuation.items() if key in left}},
-                            card_block,
-                            {"segment_ids": right,
-                             "punctuation": {key: value for key, value in punctuation.items() if key in right}},
-                        ]
-                        section["blocks"][index:index + 1] = replacement
-                    else:
-                        section["blocks"].insert(index, card_block)
-                    inserted = True
-                    break
-                if inserted:
-                    break
-            if not inserted:
-                raise ValueError("card_before target is not present in the current layout")
+        _move_card(draft["layout"], card_id, before=target, ends=_sentence_ends(draft))
         changed.append({"card_id": card_id, "before_segment_id": target})
     titles = data.get("section_titles", {})
     if not isinstance(titles, dict):
@@ -628,13 +713,26 @@ def _edit_data(draft, data, allowed):
             matches = [sections[int(old[1:]) - 1]]
         else:
             matches = [s for s in sections if s["title"] == old]
-        if len(matches) != 1 or not isinstance(new, str) or not new.strip():
+        if len(matches) != 1 or not (new is None or isinstance(new, str) and new.strip()):
             raise ValueError("section title must match exactly once; use #N for the N-th section")
+        if new is None and matches[0] is sections[0]:
+            raise ValueError("the first section has no section before it to merge into")
         renames.append((matches[0], old, new))
     # Targets are found first, so one rename never hides or creates another's.
     for section, old, new in renames:
-        section["title"] = new
-        changed.append({"title_before": old, "title_after": new})
+        if new is None:
+            changed.append({"section_merged_into_previous": old})
+        else:
+            section["title"] = new
+            changed.append({"title_before": old, "title_after": new})
+    # null merges a section into the one before it: its heading goes, its blocks stay.
+    merged = []
+    for section in sections:
+        if any(target is section and new is None for target, _, new in renames):
+            merged[-1]["blocks"].extend(section["blocks"])
+        else:
+            merged.append(section)
+    draft["layout"]["sections"] = merged
     protected = data.get("protected_terms", [])
     if (not isinstance(protected, list)
             or any(not isinstance(term, str) or not term.strip() for term in protected)):
@@ -655,6 +753,7 @@ def _edit_data(draft, data, allowed):
             body = reading.replace_card_text(body, rule, cid, terms)
         block.setdefault("text_replacements", []).extend(copy.deepcopy(rules))
         changed.extend({"card_id": cid, "text_replacement": copy.deepcopy(rule)} for rule in rules)
+    changed.extend(_settle_cards(draft))
     _render(draft)  # Local shape check, not a formal preflight or model review.
     draft["revision"] += 1
     draft["history"].append({"revision": draft["revision"], "changes": changed})
@@ -755,7 +854,8 @@ def seal(directory, task_id=None, accept_visual_uncertainties=False):
         if boundary_errors:
             detail = ", ".join(f"{e['previous_segment_id']} -> {e['card_id']} -> {e['next_segment_id']}"
                                for e in boundary_errors[:8])
-            raise ValueError("visual cards interrupt unfinished speech; fix these layout boundaries before sealing: " + detail)
+            raise ValueError("visual cards interrupt a sentence that never ends; give it an ending where the speaker "
+                             "finishes and the card moves there by itself: " + detail)
         speech_blocks = [block for block in blocks if block.get("kind") == "speech"]
         visual_blocks = [block for block in blocks if block.get("kind") == "visual"]
         focus_ids = focus.get("reviewed_segment_ids", [])

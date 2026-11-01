@@ -514,7 +514,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn("screen-001", output)
         self.assertNotIn("f000001", output)
         self.assertNotIn("source:", output)
-        self.assertIn("畫面補充另列", output)
+        self.assertNotIn("畫面補充另列", output)  # no note on how the text was made
         from video_workflow import reading
         for line in reading.traditional(document["cards"][0]["structure"]).splitlines():
             self.assertIn("> " + line, output)
