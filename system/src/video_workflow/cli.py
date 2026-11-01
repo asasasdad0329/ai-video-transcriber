@@ -733,6 +733,8 @@ def process(source, language=None, device=None, interval=None, *, resume_run=Non
             transcript = media.transcribe(tools["whisper"], _root_path(config["model"]), run / "audio.wav", out,
                                           config.get("language", "zh"), config.get("device", "auto"), config.get("threads", 4))
             transcript.update({"run_id": run_id, "source_sha256": identity["source_sha256"]})
+            if "actual_device" in transcript:
+                state["asr_device"] = transcript["actual_device"]
             # Native JSON/log locations stay portable within the run.
             for key in ("raw_json", "stdout_log", "stderr_log"):
                 if key in transcript:
@@ -1216,8 +1218,8 @@ def doctor():
     checks["ready"] = (checks["project_venv"] and model.is_file() and all(t["exists"] for t in checks["tools"].values())
                        and all(checks["packages"].values()) and checks["cublas"]["exists"]
                        and checks["system"]["vc_runtime"]["ok"])
-    checks["gpu_verified"] = False
-    checks["gpu_note"] = "doctor 僅檢查環境；CUDA 是否實際使用由每次 ASR 載入與配置記錄驗證。"
+    # process --device auto follows the driver check; status shows what each run actually used.
+    checks["asr_device"] = "gpu" if checks["system"]["nvidia_driver"]["ok"] else "cpu"
     return checks
 
 

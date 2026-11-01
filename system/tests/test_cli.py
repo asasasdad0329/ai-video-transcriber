@@ -54,7 +54,7 @@ class WorkflowContractTests(unittest.TestCase):
         self.calls["asr"] += 1
         out.mkdir(parents=True, exist_ok=True)
         cli._write(out / "whisper.json", {"native": "evidence"})
-        return {"engine": "whisper.cpp", "language": "zh", "raw_json": str(out / "whisper.json"),
+        return {"engine": "whisper.cpp", "language": "zh", "raw_json": str(out / "whisper.json"), "actual_device": "cpu",
                 "segments": [{"id": "s000001", "start": 0.0, "end": 1.0,
                               "text": "软件错字", "tokens": [{"text": "错", "p": 0.1, "start": 0.2, "end": 0.4}]},
                              {"id": "s000002", "start": 305.0, "end": 310.0,
@@ -105,6 +105,10 @@ class WorkflowContractTests(unittest.TestCase):
                           {"id": "screen-002", "kind": "caption", "title": "第二段字幕",
                            "frame_ids": ["f000002"], "verbatim_text": "字幕原文。", "structure": "字幕位於底部。",
                            "uncertainties": [], "reviewed": True}]}
+
+    def test_status_shows_the_device_speech_recognition_ran_on(self):
+        self.run_process()
+        self.assertEqual(cli.compact.status_view(cli._read(self.run / "state.json"))["asr_device"], "cpu")
 
     def test_visual_omission_requires_review_and_separate_basis(self):
         self.run_process()

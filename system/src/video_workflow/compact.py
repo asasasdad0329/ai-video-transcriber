@@ -27,7 +27,7 @@ def recheck_view(result, source_path, display_path=None):
 
 
 def status_view(state):
-    fields = ("run_id", "status", "message", "error", "primary_transcript", "review",
+    fields = ("run_id", "status", "message", "error", "asr_device", "primary_transcript", "review",
               "context_review", "review_task", "completion_requirements", "visuals_sha256", "exports",
               "primary_user_edits", "primary_user_edits_replaced")
     view = {key: copy.deepcopy(state[key]) for key in fields if key in state}

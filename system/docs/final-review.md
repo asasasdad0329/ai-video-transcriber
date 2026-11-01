@@ -22,7 +22,7 @@ edits.json 範例：
 
 更正預設 decision=correct；沒給 evidence_ids 時明示使用 text:<segment_id> 作上下文依據，沒有假稱聽音。有畫面／重辨依據時可直接附 evidence_ids。keep 與 needs_review 可省略 new_text。needs_review 不給 new_text 時保留整段辨識原文，〔？〕標在段尾。只有部分字詞不確定時做部分更正：new_text 改好有把握的字，並在仍照辨識保留的字詞後面加〔？〕；這段照樣計為未解。來源原文、版本、合法證據 ID 與長覆蓋清單由程式管理。先前未解項不會因這次未提及便自動清除。
 
-第一次建立草稿時，目錄須在正式 run 外。final_review_tasks.json 以 `CODEX_SESSION_ID`／`CODEX_THREAD_ID`（沒有 session 環境變數的 host 必須用 `--task-id`）記錄這個任務所綁定的唯一草稿；host 已提供 session ID 時，`--task-id` 不得改成另一個值。同一任務再次 start-draft 只回傳原草稿。若另一個 session 使用相同輸出目錄，CLI 自動加任務雜湊後綴，因此它能從同一 run 重新開始自己的後續流程。
+第一次建立草稿時，目錄須在正式 run 外。final_review_tasks.json 以 host 的 session 環境變數（Codex 的 `CODEX_SESSION_ID`／`CODEX_THREAD_ID`、Claude Code 的 `CLAUDE_CODE_SESSION_ID`，都由 CLI 自動讀取；沒有的 host 必須用 `--task-id`）記錄這個任務所綁定的唯一草稿；host 已提供 session ID 時，`--task-id` 不得改成另一個值。同一任務再次 start-draft 只回傳原草稿。若另一個 session 使用相同輸出目錄，CLI 自動加任務雜湊後綴，因此它能從同一 run 重新開始自己的後續流程。
 
 來源基礎在全文閱讀前更新時，可在同一任務替換尚未讀過的 staging 草稿；封存後不得再以一般小修改動候選。讀過全文後，同一任務不得重建或再取全文。新 session 可承接既有閱讀 checkpoint，修正機械錯誤或完成發布，但不因修正次數再次取得同一候選全文。一般 status 會列出目前任務的封存、閱讀及提交狀態。視覺複核仍有 uncertainty 時，start-draft 預設停止；只有來源確實不可讀才在 start-draft 或 seal-draft 加 `--accept-visual-uncertainties`，接受數量會寫入封存收據。
 
@@ -57,6 +57,8 @@ find/replace 必須唯一命中，繁／簡顯示可定位；同詞多處只回�
 ```
 
 section_titles 的鍵是目前的小節名（必須唯一），或 `#N`：全文第 N 個小節（從 1 起算，與 candidate-map.json 的 `sections` 相同），同名小節用它區分；同一批的改名先找齊目標再一起套用，可以互換名稱。值為 null 時把該小節併入前一節：標題拿掉，內容留在原處；要把被小節標題隔開的段落接起來，先併節再 join_before。
+
+沒有既有 layout 時，start-draft 建立預設排版：辨識結果多半沒有標點，所以每個 segment 後預設加「，」、約 140 字收成一段並加「。」，每張圖卡各開一個以卡片標題命名的小節。先用 edit-draft 的 punctuation 把句讀標對，圖卡會跟著落到對的位置；再看 candidate-map.json 的 `sections`，用 section_titles 併節或改名；只有仍不對的圖卡才用 card_before。全文閱讀前看不到的段落，句讀留到 finish-review 一起補。
 
 圖卡不會切斷句子。講者常在句子講到一半時換投影片；每次建立草稿與每批變更後，程式把每張圖卡，連同它開頭的小節標題，放在投影片出現時那一句的開頭或結尾，取時間較近的一端，被切開的段落也接回同一段，移動結果列在變更紀錄的 `moved_after_sentence_end`（圖卡改放在這個 segment 之後；null 表示全文開頭）。句號、問號、驚嘆號、拖長的「……」與引出畫面的冒號都算句子結束。圖卡位置跟著句讀前後移動，所以只要把句讀標對，圖卡就會落在對的地方，不要為了放圖卡而加句號。用 card_before 指定過的圖卡會固定在那裡，除非那裡會切斷句子，那時移到該句結尾。每批變更全部有效才保存；片段修改不能偷換未知 ID 或使用不存在的證據。protected_terms、標點、分段與文字都在 staging 草稿累積，不為任何小修另建 planning 或工具鏈。多次局部編輯最後合併成同一原文至最終文字的單筆 Patch 項，不建立中間正式版本。`edit-draft` 只供封存前使用；封存後會拒絕逐項修補。
 
