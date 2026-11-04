@@ -115,6 +115,11 @@ def extract(archive, destination):
 
 
 TOOL_KEYS = ("ffmpeg", "cublas")
+# Archives unpacked whole: folder and the program that must be there. The folder records the
+# SHA-256 of the archive it came from, so a cleared download cache costs nothing and a newly
+# pinned version is unpacked again.
+UNPACKED = {"uv": (".runtime/tools/uv", "uv.exe"), "whisper": (".runtime/tools/whisper", "Release/whisper-cli.exe")}
+UNPACKED_FROM = "unpacked-from.sha256"
 
 
 def install_members(key, offline=False):
@@ -145,12 +150,19 @@ def install(key, offline=False):
     if key in TOOL_KEYS:
         install_members(key, offline)
         return
-    lock = json.loads(LOCK.read_text(encoding="utf-8"))
-    path = fetch(lock["assets"][key], offline)
-    if key == "uv" and not (ROOT / ".runtime/tools/uv/uv.exe").is_file():
-        extract(path, ROOT / ".runtime/tools/uv")
-    elif key == "whisper" and not (ROOT / ".runtime/tools/whisper/Release/whisper-cli.exe").is_file():
-        extract(path, ROOT / ".runtime/tools/whisper")
+    asset = json.loads(LOCK.read_text(encoding="utf-8"))["assets"][key]
+    if key not in UNPACKED:
+        fetch(asset, offline)
+        return
+    folder, program = UNPACKED[key]
+    destination = ROOT / folder
+    record = destination / UNPACKED_FROM
+    if (destination / program).is_file() and record.is_file() \
+            and record.read_text(encoding="ascii").strip() == asset["sha256"]:
+        print(f"cached: {key} in {folder}", flush=True)
+        return
+    extract(fetch(asset, offline), destination)
+    record.write_text(asset["sha256"] + "\n", encoding="ascii")
 
 
 def main():

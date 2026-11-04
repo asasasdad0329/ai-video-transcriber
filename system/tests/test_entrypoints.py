@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "system/bootstrap"))
@@ -130,6 +131,43 @@ class DownloadTests(unittest.TestCase):
                 patch.object(fetch_assets, "_urllib", refuse), patch("builtins.print"):
             with self.assertRaisesRegex(OSError, "every method"):
                 fetch_assets.download("https://example.invalid/asset", Path(folder) / "asset.partial")
+
+
+class UnpackTests(unittest.TestCase):
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        self.root = Path(folder.name)
+        for target in (patch.object(fetch_assets, "ROOT", self.root), patch("builtins.print")):
+            target.start()
+            self.addCleanup(target.stop)
+        self.program = self.root / ".runtime/tools/whisper/Release/whisper-cli.exe"
+
+    def archive(self, content):
+        path = self.root / "whisper.zip"
+        with zipfile.ZipFile(path, "w") as bundle:
+            bundle.writestr("Release/whisper-cli.exe", content)
+        return path
+
+    def test_an_unpacked_tool_needs_no_archive(self):
+        # Setup once fetched the archive before looking at the tool, so clearing the download
+        # cache cost a 270 MB download, and offline setup failed outright.
+        with patch.object(fetch_assets, "fetch", return_value=self.archive(b"pinned")):
+            fetch_assets.install("whisper")
+        with patch.object(fetch_assets, "fetch", side_effect=FileNotFoundError("cache cleared")):
+            fetch_assets.install("whisper", offline=True)
+        self.assertEqual(self.program.read_bytes(), b"pinned")
+
+    def test_a_new_pin_or_a_missing_program_is_unpacked_again(self):
+        self.program.parent.mkdir(parents=True)
+        self.program.write_bytes(b"older version")
+        (self.program.parents[1] / fetch_assets.UNPACKED_FROM).write_text("older pin\n", encoding="ascii")
+        with patch.object(fetch_assets, "fetch", return_value=self.archive(b"pinned")):
+            fetch_assets.install("whisper")
+            self.assertEqual(self.program.read_bytes(), b"pinned")
+            self.program.unlink()
+            fetch_assets.install("whisper")
+        self.assertEqual(self.program.read_bytes(), b"pinned")
 
 
 class GpuOcrChoiceTests(unittest.TestCase):
