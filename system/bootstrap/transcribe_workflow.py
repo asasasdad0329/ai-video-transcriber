@@ -1,4 +1,4 @@
-"""Entry point for .venv/python -I -B; no global packages or PATH changes."""
+"""Entry point for the transcribe venv (python -I -B); no global packages or PATH changes."""
 from pathlib import Path
 import sys
 

@@ -1,4 +1,4 @@
-"""Entry point for the publish venv (data cards and handouts); isolated like video_workflow.py."""
+"""Entry point for the publish venv (data cards and handouts); isolated like transcribe_workflow.py."""
 from pathlib import Path
 import sys
 

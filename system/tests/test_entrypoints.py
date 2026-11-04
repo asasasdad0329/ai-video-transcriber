@@ -55,6 +55,17 @@ class ShellFileTests(unittest.TestCase):
                 self.assertEqual(lines[-1:], ["0"], path.name)
 
 
+class ModuleNameTests(unittest.TestCase):
+    def test_no_bootstrap_script_shadows_a_source_module(self):
+        # Bootstrap scripts put their own folder on sys.path, so a script named like a module in
+        # system/src wins or loses by path order alone: setup once imported the transcribe entry
+        # script in place of the video_workflow package and failed after a finished install.
+        src = ROOT / "system/src"
+        modules = {p.stem for p in src.glob("*.py")} | {p.parent.name for p in src.glob("*/__init__.py")}
+        scripts = {p.stem for p in (ROOT / "system/bootstrap").glob("*.py")}
+        self.assertEqual(scripts & modules, set())
+
+
 @unittest.skipUnless(POWERSHELL.is_file(), "Windows PowerShell 5.1 not available")
 class EntryPointTests(unittest.TestCase):
     def test_arguments_reach_python_unchanged(self):
@@ -153,6 +164,20 @@ class GpuOcrChoiceTests(unittest.TestCase):
             setup.offer_gpu_ocr(self.session, ready=lambda: True, interactive=True, ask=lambda _: "Y")
         install.assert_called_once()
         self.assertEqual(setup.transcribe_lock(), setup.GPU_OCR_LOCK)
+
+    def test_setup_reaches_the_real_detector_as_the_launcher_loads_it(self):
+        # The other tests pass `ready`, and this process imported video_workflow long ago;
+        # only a fresh project Python, set up like launcher.py, sees what `run.ps1 setup` sees.
+        python = setup._python_for("bootstrap-lock.json")[1]
+        driver = ("import pathlib, sys; sys.path.insert(0, sys.argv[1]); import setup; "
+                  "setup.GPU_OCR_CHOICE = pathlib.Path(sys.argv[2]); "
+                  "setup.offer_gpu_ocr(type('Session', (), {'say': lambda _, text: None})(), interactive=False); "
+                  "print(sys.modules['video_workflow.system_components'].__file__)")
+        done = subprocess.run([str(python if python.is_file() else sys.executable), "-X", "utf8", "-I", "-B",
+                               "-c", driver, str(ROOT / "system/bootstrap"), self.folder.name + "/gpu-ocr.json"],
+                              capture_output=True, encoding="utf-8", timeout=60)
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(Path(done.stdout.strip()), ROOT / "system/src/video_workflow/system_components.py")
 
     def test_machines_without_nvidia_are_not_asked(self):
         setup.offer_gpu_ocr(self.session, ready=lambda: False, interactive=True, ask=lambda _: self.fail("asked"))

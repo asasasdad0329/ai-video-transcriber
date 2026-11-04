@@ -17,7 +17,7 @@ import project_env  # noqa: E402
 
 TRANSCRIBE = ROOT / ".runtime/envs/transcribe/Scripts/python.exe"
 PUBLISH = ROOT / ".runtime/envs/publish/Scripts/python.exe"
-CATALOG = HERE / "catalog.py"
+CATALOG = HERE / "catalog_index.py"
 PUBLISH_COMMANDS = {"datacard", "handout", "publish-doctor", "derived-list"}
 CHANGING_COMMANDS = {"process", "resume", "apply", "finalize-visuals", "finish-review", "datacard", "handout"}
 NEEDS_SETUP = "轉錄環境還沒安裝：先執行 .\\run.ps1 setup（約 1.5 GB，全部裝在專案的 .runtime 內），再執行這個命令。"
@@ -66,7 +66,7 @@ def main(argv):
         if not TRANSCRIBE.is_file():
             print(NEEDS_SETUP)
             return 3
-        code = run(TRANSCRIBE, HERE / "video_workflow.py", *argv)
+        code = run(TRANSCRIBE, HERE / "transcribe_workflow.py", *argv)
     if command in CHANGING_COMMANDS:
         # Keep the work index current; an index failure never changes the command's result.
         if run(index_python, CATALOG, "--quiet", quiet=True):
